@@ -9,136 +9,25 @@
   body { background: #050d1a; color: #fff; font-family: Arial, sans-serif; overflow-x: hidden; }
   input { color: #fff; font-family: Arial, sans-serif; }
   button { font-family: Arial, sans-serif; cursor: pointer; }
-  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #0d2137; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #0d2137; }
   ::-webkit-scrollbar-thumb { background: #334455; border-radius: 3px; }
 </style>
 </head>
 <body>
 <div id="root"></div>
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.1/dist/peerjs.min.js"></script>
+<!-- PeerJS para P2P real entre dispositivos distintos -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef, useCallback } = React;
-
-// ─── P2P MANAGER ──────────────────────────────────────────────────────
-class P2PManager {
-  constructor() {
-    this.peer = null;
-    this.peerId = null;
-    this.connections = new Map();
-    this.messageListeners = [];
-    this.statusListeners = [];
-    this.initPeer();
-  }
-
-  initPeer() {
-    this.peer = new Peer({
-      config: {
-        iceServers: [
-          { urls: ['stun:stun.l.google.com:19302'] },
-          { urls: ['stun:stun1.l.google.com:19302'] }
-        ]
-      }
-    });
-
-    this.peer.on('open', (id) => {
-      this.peerId = id;
-      console.log('Mi ID:', id);
-      this.notifyStatus('open');
-    });
-
-    this.peer.on('connection', (conn) => {
-      this.handleConnection(conn);
-    });
-
-    this.peer.on('error', (err) => {
-      console.error('Error Peer:', err);
-      this.notifyStatus('error', err.message);
-    });
-  }
-
-  handleConnection(conn) {
-    const peerId = conn.peer;
-    this.connections.set(peerId, conn);
-
-    conn.on('data', (data) => {
-      this.notifyMessage(peerId, data);
-    });
-
-    conn.on('open', () => {
-      this.notifyStatus('peer-connected', peerId);
-    });
-
-    conn.on('close', () => {
-      this.connections.delete(peerId);
-      this.notifyStatus('peer-disconnected', peerId);
-    });
-
-    conn.on('error', (err) => {
-      console.error('Error conexión:', err);
-    });
-  }
-
-  connect(remotePeerId) {
-    if (this.connections.has(remotePeerId)) {
-      return this.connections.get(remotePeerId);
-    }
-
-    const conn = this.peer.connect(remotePeerId);
-    this.handleConnection(conn);
-    return conn;
-  }
-
-  send(peerId, data) {
-    const conn = this.connections.get(peerId);
-    if (conn && conn.open) {
-      conn.send(data);
-    }
-  }
-
-  broadcast(data) {
-    this.connections.forEach((conn) => {
-      if (conn.open) {
-        conn.send(data);
-      }
-    });
-  }
-
-  subscribeToBroadcast(callback) {
-    this.messageListeners.push(callback);
-    return () => {
-      this.messageListeners = this.messageListeners.filter(l => l !== callback);
-    };
-  }
-
-  subscribeToStatus(callback) {
-    this.statusListeners.push(callback);
-    return () => {
-      this.statusListeners = this.statusListeners.filter(l => l !== callback);
-    };
-  }
-
-  notifyMessage(peerId, data) {
-    this.messageListeners.forEach(cb => cb(peerId, data));
-  }
-
-  notifyStatus(status, data) {
-    this.statusListeners.forEach(cb => cb(status, data));
-  }
-
-  getConnectedPeers() {
-    return Array.from(this.connections.keys());
-  }
-}
-
-const p2pManager = new P2PManager();
-
+ 
 // ─── CONSTANTS ─────────────────────────────────────────────────────────
 const PLAYER_COLORS = ["#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6","#1abc9c"];
 const COLOR_NAMES = {"#e74c3c":"Rojo","#3498db":"Azul","#2ecc71":"Verde","#f39c12":"Naranja","#9b59b6":"Morado","#1abc9c":"Turquesa"};
-
+ 
 const TERRITORY_POSITIONS = {
   alaska:{x:75,y:95,label:"Alaska"},northwest_territory:{x:155,y:85,label:"NW Territory"},
   greenland:{x:290,y:60,label:"Groenlandia"},alberta:{x:140,y:128,label:"Alberta"},
@@ -162,12 +51,12 @@ const TERRITORY_POSITIONS = {
   indonesia:{x:722,y:312,label:"Indonesia"},new_guinea:{x:792,y:292,label:"Nueva Guinea"},
   western_australia:{x:752,y:392,label:"O.Australia"},eastern_australia:{x:822,y:372,label:"E.Australia"},
 };
-
+ 
 const CONTINENT_COLORS = {
   north_america:"#2980b9",south_america:"#27ae60",europe:"#8e44ad",
   africa:"#e67e22",asia:"#c0392b",australia:"#16a085",
 };
-
+ 
 const TERRITORY_CONTINENT = {
   alaska:"north_america",northwest_territory:"north_america",greenland:"north_america",
   alberta:"north_america",ontario:"north_america",quebec:"north_america",
@@ -182,9 +71,9 @@ const TERRITORY_CONTINENT = {
   japan:"asia",siam:"asia",
   indonesia:"australia",new_guinea:"australia",western_australia:"australia",eastern_australia:"australia",
 };
-
+ 
 const CONTINENT_BONUS = {north_america:5,south_america:2,europe:5,africa:3,asia:7,australia:2};
-
+ 
 const NEIGHBORS = {
   alaska:["northwest_territory","alberta","kamchatka"],
   northwest_territory:["alaska","alberta","ontario","greenland"],
@@ -229,7 +118,7 @@ const NEIGHBORS = {
   western_australia:["indonesia","new_guinea","eastern_australia"],
   eastern_australia:["new_guinea","western_australia"],
 };
-
+ 
 const CONTINENT_SHAPES = {
   north_america:[[50,92],[68,62],[80,52],[132,50],[162,56],[208,46],[262,36],[302,40],[312,58],[298,98],[286,148],[284,208],[265,232],[235,248],[208,250],[195,260],[182,270],[164,264],[148,244],[120,254],[98,240],[75,220],[68,192],[70,140],[50,92]],
   south_america:[[192,266],[250,254],[312,258],[326,302],[323,356],[308,412],[286,458],[262,470],[240,460],[224,430],[210,392],[196,356],[190,306],[192,266]],
@@ -242,115 +131,463 @@ const CONTINENT_SHAPES = {
   australia_main:[[700,298],[732,286],[800,280],[860,283],[870,308],[858,348],[842,388],[820,410],[780,420],[750,422],[716,410],[703,385],[696,348],[700,298]],
   new_guinea:[[758,272],[798,265],[830,275],[825,298],[796,305],[760,298],[758,272]],
 };
-
+ 
 const CONTINENT_BLOB_COLORS = {
   north_america:"#3498db",south_america:"#2ecc71",europe_main:"#9b59b6",iceland:"#9b59b6",
   africa:"#e67e22",madagascar:"#e67e22",asia:"#e74c3c",japan:"#e74c3c",
   australia_main:"#1abc9c",new_guinea:"#1abc9c",
 };
-
+ 
+// ─── P2P MANAGER (PeerJS — WebRTC real entre dispositivos) ─────────────
+/*
+  Arquitectura:
+  • Host: crea sala con un código único (su Peer ID). Gestiona TODA la lógica del juego.
+          Recibe acciones de los clientes, las aplica y retransmite el nuevo estado.
+  • Client: se conecta al Host usando el código de sala. Envía acciones y recibe estado.
+ 
+  Mensajes Host → Clientes:
+    lobby_update  { players }
+    game_start    { players, playerIdMap, initialGs }
+    game_state    { gs }
+    kicked        { msg }
+ 
+  Mensajes Cliente → Host:
+    join          { name, peerId }
+    game_action   { action, peerId }
+*/
+class P2PManager {
+  constructor() {
+    this.peer        = null;
+    this.connections = {};      // peerId → DataConnection  (solo host)
+    this.hostConn    = null;    // DataConnection al host    (solo cliente)
+    this.isHost      = false;
+    this.roomCode    = null;
+    this.myPeerId    = null;
+    this.myPlayerId  = null;    // "p0", "p1", …
+    this.lobbyPlayers = [];     // [{ peerId, name, isHost }]
+ 
+    // Callbacks asignados externamente por los componentes
+    this.onLobbyUpdate     = null;  // (players[]) => void
+    this.onGameStart       = null;  // (players, myPlayerId, initialGs) => void
+    this.onGameStateUpdate = null;  // (gs) => void
+    this.onGameAction      = null;  // (action, senderPeerId) => void  [host only]
+    this.onDisconnect      = null;  // (msg) => void
+  }
+ 
+  // ── Crear sala (host) ─────────────────────────────────────────────
+  // Devuelve Promise<roomCode>
+  createRoom(playerName) {
+    return new Promise((resolve, reject) => {
+      this.isHost      = true;
+      this.playerName  = playerName;
+ 
+      const code = Math.random().toString(36).substr(2, 6).toUpperCase();
+ 
+      try { this.peer = new Peer(code); }
+      catch (e) { reject(new Error('PeerJS no disponible. ¿Está cargado el script?')); return; }
+ 
+      const timer = setTimeout(() => reject(new Error('Tiempo de espera agotado (15s)')), 15000);
+ 
+      this.peer.on('open', id => {
+        clearTimeout(timer);
+        this.roomCode    = id;
+        this.myPeerId    = id;
+        this.lobbyPlayers = [{ peerId: id, name: playerName, isHost: true }];
+        resolve(id);
+      });
+ 
+      this.peer.on('connection', conn => this._onNewConnection(conn));
+ 
+      this.peer.on('error', err => {
+        clearTimeout(timer);
+        // Si el ID ya está en uso, reintentar con uno nuevo
+        if (err.type === 'unavailable-id') {
+          this.peer.destroy();
+          this.peer = null;
+          const code2 = Math.random().toString(36).substr(2, 6).toUpperCase();
+          this.peer = new Peer(code2);
+          this.peer.on('open', id => { clearTimeout(timer); this.roomCode = id; this.myPeerId = id; this.lobbyPlayers = [{ peerId: id, name: playerName, isHost: true }]; resolve(id); });
+          this.peer.on('connection', c => this._onNewConnection(c));
+          this.peer.on('error', e2 => { clearTimeout(timer); reject(e2); });
+        } else {
+          reject(err);
+        }
+      });
+    });
+  }
+ 
+  // ── Unirse a sala (cliente) ────────────────────────────────────────
+  // Devuelve Promise<void> (resuelve cuando la conexión con el host se abre)
+  joinRoom(roomCode, playerName) {
+    return new Promise((resolve, reject) => {
+      this.isHost     = false;
+      this.roomCode   = roomCode;
+      this.playerName = playerName;
+ 
+      const timer = setTimeout(() => reject(new Error('Tiempo de espera agotado (15s). Verifica el código.')), 15000);
+ 
+      try { this.peer = new Peer(); }
+      catch (e) { clearTimeout(timer); reject(new Error('PeerJS no disponible.')); return; }
+ 
+      this.peer.on('open', id => {
+        this.myPeerId = id;
+        const conn = this.peer.connect(roomCode, { reliable: true });
+        this.hostConn = conn;
+ 
+        conn.on('open', () => {
+          clearTimeout(timer);
+          conn.send({ type: 'join', name: playerName, peerId: id });
+          resolve();
+        });
+ 
+        conn.on('data',  data => this._onHostMessage(data));
+        conn.on('close', ()   => { if (this.onDisconnect) this.onDisconnect('El host se desconectó'); });
+        conn.on('error', err  => { clearTimeout(timer); reject(err); });
+      });
+ 
+      this.peer.on('error', err => { clearTimeout(timer); reject(err); });
+    });
+  }
+ 
+  // ── Manejo de conexiones nuevas (host) ────────────────────────────
+  _onNewConnection(conn) {
+    conn.on('open', () => {
+      conn.on('data',  data => this._onClientMessage(conn, data));
+      conn.on('close', ()   => this._removePlayer(conn.peer));
+      conn.on('error', err  => console.warn('P2P conn error:', err));
+    });
+  }
+ 
+  // ── Mensajes que llegan al host desde un cliente ───────────────────
+  _onClientMessage(conn, data) {
+    if (data.type === 'join') {
+      if (this.lobbyPlayers.length >= 6) {
+        conn.send({ type: 'kicked', msg: 'La sala está llena (máx. 6 jugadores)' });
+        return;
+      }
+      this.lobbyPlayers.push({ peerId: data.peerId, name: data.name, isHost: false });
+      this.connections[data.peerId] = conn;
+      this._broadcastLobby();
+    } else if (data.type === 'game_action') {
+      if (this.onGameAction) this.onGameAction(data.action, data.peerId);
+    }
+  }
+ 
+  // ── Mensajes que llegan al cliente desde el host ───────────────────
+  _onHostMessage(data) {
+    switch (data.type) {
+      case 'lobby_update':
+        this.lobbyPlayers = data.players;
+        if (this.onLobbyUpdate) this.onLobbyUpdate([...data.players]);
+        break;
+      case 'game_start':
+        this.myPlayerId = data.playerIdMap[this.myPeerId];
+        if (this.onGameStart) this.onGameStart(data.players, this.myPlayerId, data.initialGs);
+        break;
+      case 'game_state':
+        if (this.onGameStateUpdate) this.onGameStateUpdate(data.gs);
+        break;
+      case 'kicked':
+        if (this.onDisconnect) this.onDisconnect(data.msg || 'Fuiste expulsado de la sala');
+        this.destroy();
+        break;
+    }
+  }
+ 
+  // ── Utilidades del host ───────────────────────────────────────────
+  _broadcastLobby() {
+    const msg = { type: 'lobby_update', players: this.lobbyPlayers };
+    Object.values(this.connections).forEach(c => { try { c.send(msg); } catch (e) {} });
+    if (this.onLobbyUpdate) this.onLobbyUpdate([...this.lobbyPlayers]);
+  }
+ 
+  _removePlayer(peerId) {
+    this.lobbyPlayers = this.lobbyPlayers.filter(p => p.peerId !== peerId);
+    delete this.connections[peerId];
+    this._broadcastLobby();
+  }
+ 
+  kickPlayer(peerId) {
+    const conn = this.connections[peerId];
+    if (conn) {
+      try { conn.send({ type: 'kicked', msg: 'Expulsado por el host' }); } catch (e) {}
+      setTimeout(() => { try { conn.close(); } catch (e) {} }, 300);
+    }
+    this._removePlayer(peerId);
+  }
+ 
+  // Inicia el juego: crea el estado inicial y lo envía a todos
+  // Devuelve { players, myPlayerId, initialGs }
+  startGame() {
+    const players = this.lobbyPlayers.map((p, i) => ({
+      id:     'p' + i,
+      name:   p.name,
+      color:  PLAYER_COLORS[i],
+      peerId: p.peerId,
+    }));
+ 
+    const playerIdMap = {};
+    players.forEach(p => { playerIdMap[p.peerId] = p.id; });
+ 
+    this.myPlayerId = playerIdMap[this.myPeerId];
+ 
+    // El host genera el estado inicial (random) y lo comparte para que todos tengan el mismo
+    const initialGs = initGame(players.map(p => ({ id: p.id, name: p.name, color: p.color, peerId: p.peerId })));
+ 
+    const msg = { type: 'game_start', players, playerIdMap, initialGs };
+    Object.values(this.connections).forEach(c => { try { c.send(msg); } catch (e) {} });
+ 
+    return { players, myPlayerId: this.myPlayerId, initialGs };
+  }
+ 
+  // Retransmite el estado del juego a todos los clientes
+  broadcastGameState(gs) {
+    const msg = { type: 'game_state', gs };
+    Object.values(this.connections).forEach(c => { try { c.send(msg); } catch (e) {} });
+  }
+ 
+  // Cliente envía una acción al host
+  sendAction(action) {
+    if (this.hostConn && this.hostConn.open) {
+      this.hostConn.send({ type: 'game_action', action, peerId: this.myPeerId });
+    }
+  }
+ 
+  destroy() {
+    try {
+      Object.values(this.connections).forEach(c => c.close());
+      if (this.hostConn) this.hostConn.close();
+      if (this.peer)     this.peer.destroy();
+    } catch (e) {}
+    this.peer         = null;
+    this.connections  = {};
+    this.hostConn     = null;
+    this.onLobbyUpdate     = null;
+    this.onGameStart       = null;
+    this.onGameStateUpdate = null;
+    this.onGameAction      = null;
+    this.onDisconnect      = null;
+  }
+}
+ 
 // ─── UTILS ──────────────────────────────────────────────────────────
 function rollDie() { return Math.floor(Math.random() * 6) + 1; }
-function rollDice(n) { return Array.from({length: n}, rollDie).sort((a,b)=>b-a); }
+function rollDice(n) { return Array.from({length: n}, rollDie).sort((a,b) => b-a); }
 function resolveAttack(atkDice, defDice) {
-  let aLoss=0, dLoss=0;
+  let aLoss = 0, dLoss = 0;
   const pairs = Math.min(atkDice.length, defDice.length);
-  for(let i=0;i<pairs;i++) {
-    if(atkDice[i] > defDice[i]) dLoss++; else aLoss++;
+  for (let i = 0; i < pairs; i++) {
+    if (atkDice[i] > defDice[i]) dLoss++; else aLoss++;
   }
-  return {aLoss, dLoss};
+  return { aLoss, dLoss };
 }
 function hashStr(s) {
-  let h=0; for(let i=0;i<s.length;i++) h=Math.imul(31,h)+s.charCodeAt(i)|0;
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = Math.imul(31, h) + s.charCodeAt(i) | 0;
   return Math.abs(h);
 }
 function pointsPath(pts) {
-  if(!pts.length) return "";
-  return `M ${pts.map(([x,y])=>`${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ")} Z`;
+  if (!pts.length) return "";
+  return `M ${pts.map(([x,y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ")} Z`;
 }
 function makeTerritoryPolygon(tid) {
-  const pos = TERRITORY_POSITIONS[tid];
-  if(!pos) return [];
+  const pos  = TERRITORY_POSITIONS[tid]; if (!pos) return [];
   const cont = TERRITORY_CONTINENT[tid];
   const seed = hashStr(tid);
-  const base = {north_america:{rx:22,ry:14},south_america:{rx:18,ry:20},europe:{rx:16,ry:11},africa:{rx:18,ry:18},asia:{rx:18,ry:13},australia:{rx:17,ry:11}}[cont]||{rx:18,ry:14};
-  const rot = ((seed%360)-180)*Math.PI/180;
-  const wobble=[0.92,1.08,0.96,1.12,0.98,1.04,0.90,1.06];
-  return Array.from({length:8},(_,i)=>{
-    const angle=rot+(Math.PI*2*i)/8;
-    const rx=base.rx*wobble[(seed+i)%8]; const ry=base.ry*wobble[(seed+i*3)%8];
-    return [pos.x+Math.cos(angle)*rx+Math.sin(angle*1.3)*2.4, pos.y+Math.sin(angle)*ry+Math.cos(angle*1.1)*1.8];
+  const base = { north_america:{rx:22,ry:14}, south_america:{rx:18,ry:20}, europe:{rx:16,ry:11}, africa:{rx:18,ry:18}, asia:{rx:18,ry:13}, australia:{rx:17,ry:11} }[cont] || {rx:18,ry:14};
+  const rot    = ((seed % 360) - 180) * Math.PI / 180;
+  const wobble = [0.92,1.08,0.96,1.12,0.98,1.04,0.90,1.06];
+  return Array.from({length:8}, (_, i) => {
+    const angle = rot + (Math.PI * 2 * i) / 8;
+    const rx = base.rx * wobble[(seed + i)     % 8];
+    const ry = base.ry * wobble[(seed + i * 3) % 8];
+    return [pos.x + Math.cos(angle)*rx + Math.sin(angle*1.3)*2.4,
+            pos.y + Math.sin(angle)*ry + Math.cos(angle*1.1)*1.8];
   });
-}
-function calcReinforcements(territories, playerId) {
-  const owned = territories.filter(t=>t.owner===playerId);
-  let bonus = Math.max(3, Math.floor(owned.length/3));
-  const ownedIds = new Set(owned.map(t=>t.id));
-  for(const [cont, tids] of Object.entries(groupByContinent())) {
-    if(tids.every(id=>ownedIds.has(id))) bonus += CONTINENT_BONUS[cont]||0;
-  }
-  return bonus;
 }
 function groupByContinent() {
   const g = {};
-  for(const [tid,cont] of Object.entries(TERRITORY_CONTINENT)) {
-    if(!g[cont]) g[cont]=[];
+  for (const [tid, cont] of Object.entries(TERRITORY_CONTINENT)) {
+    if (!g[cont]) g[cont] = [];
     g[cont].push(tid);
   }
   return g;
 }
+function calcReinforcements(territories, playerId) {
+  const owned = territories.filter(t => t.owner === playerId);
+  let bonus = Math.max(3, Math.floor(owned.length / 3));
+  const ownedIds = new Set(owned.map(t => t.id));
+  for (const [cont, tids] of Object.entries(groupByContinent())) {
+    if (tids.every(id => ownedIds.has(id))) bonus += CONTINENT_BONUS[cont] || 0;
+  }
+  return bonus;
+}
 function shuffle(arr) {
-  const a=[...arr];
-  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
   return a;
 }
 function initGame(players) {
-  const tids = Object.keys(TERRITORY_POSITIONS);
+  const tids     = Object.keys(TERRITORY_POSITIONS);
   const shuffled = shuffle(tids);
   const territories = {};
-  shuffled.forEach((tid,i)=>{
-    territories[tid]={id:tid, owner:players[i%players.length].id, armies:1};
+  shuffled.forEach((tid, i) => {
+    territories[tid] = { id: tid, owner: players[i % players.length].id, armies: 1 };
   });
-  const extraArmies = {2:40,3:35,4:30,5:25,6:20}[players.length]||20;
-  players.forEach(p=>{
-    let extra = extraArmies - Object.values(territories).filter(t=>t.owner===p.id).length;
-    while(extra>0) {
-      const myT = Object.values(territories).filter(t=>t.owner===p.id);
-      const t = myT[Math.floor(Math.random()*myT.length)];
+  const extraArmies = { 2:40, 3:35, 4:30, 5:25, 6:20 }[players.length] || 20;
+  players.forEach(p => {
+    let extra = extraArmies - Object.values(territories).filter(t => t.owner === p.id).length;
+    while (extra > 0) {
+      const myT = Object.values(territories).filter(t => t.owner === p.id);
+      const t   = myT[Math.floor(Math.random() * myT.length)];
       t.armies++;
       extra--;
     }
   });
   const firstPlayer = players[0].id;
   return {
-    phase:"reinforce",
-    currentPlayer:firstPlayer,
+    phase:              'reinforce',
+    currentPlayer:      firstPlayer,
     players,
     territories,
     reinforcementsLeft: calcReinforcements(Object.values(territories), firstPlayer),
-    attackResult:null,
-    winner:null,
-    message:"Coloca tus refuerzos",
-    turnOrder:players.map(p=>p.id),
-    turnIndex:0,
+    attackResult:       null,
+    winner:             null,
+    message:            'Coloca tus refuerzos',
+    turnOrder:          players.map(p => p.id),
+    turnIndex:          0,
   };
 }
-
+ 
+// ─── GAME LOGIC FUNCTIONS ────────────────────────────────────────────
+function nextTurn(gs) {
+  const alive = gs.turnOrder.filter(pid => Object.values(gs.territories).some(t => t.owner === pid));
+  if (alive.length <= 1) return { ...gs, phase:'ended', winner:alive[0]||null, message:'¡Juego terminado!' };
+  let nextIdx = (gs.turnIndex + 1) % gs.turnOrder.length;
+  while (!alive.includes(gs.turnOrder[nextIdx])) nextIdx = (nextIdx + 1) % gs.turnOrder.length;
+  const nextPid = gs.turnOrder[nextIdx];
+  const reinf   = calcReinforcements(Object.values(gs.territories), nextPid);
+  return {
+    ...gs, phase:'reinforce', currentPlayer:nextPid, turnIndex:nextIdx,
+    reinforcementsLeft:reinf, attackResult:null,
+    message:`Es el turno de ${gs.players.find(p=>p.id===nextPid)?.name||'?'}. Coloca ${reinf} refuerzos.`,
+  };
+}
+ 
+function applyReinforce(gs, toTerritory, armies) {
+  if (!toTerritory || armies < 1) return gs;
+  const actual = Math.min(armies, gs.reinforcementsLeft);
+  const territories = { ...gs.territories, [toTerritory]: { ...gs.territories[toTerritory], armies: gs.territories[toTerritory].armies + actual } };
+  const left = gs.reinforcementsLeft - actual;
+  const ng   = { ...gs, territories, reinforcementsLeft: left };
+  if (left <= 0) return { ...ng, phase:'attack', message:'Fase de Ataque — selecciona tu territorio para atacar' };
+  return { ...ng, message:`${left} refuerzos restantes` };
+}
+ 
+function applyAttack(gs, fromT, toT, blitz = false) {
+  const from = gs.territories[fromT];
+  const to   = gs.territories[toT];
+  if (!from || !to || from.armies < 2) return gs;
+ 
+  const territories = { ...gs.territories };
+  let attackResult;
+ 
+  if (blitz) {
+    let atkA = from.armies, defA = to.armies;
+    let totalAtkLoss = 0, totalDefLoss = 0, rounds = 0;
+    let lastAtkDice = [], lastDefDice = [], lastALoss = 0, lastDLoss = 0;
+    while (atkA >= 2 && defA > 0) {
+      const nd = Math.min(3, atkA - 1), dd = Math.min(2, defA);
+      const ad = rollDice(nd), dd2 = rollDice(dd);
+      const { aLoss, dLoss } = resolveAttack(ad, dd2);
+      atkA -= aLoss; defA -= dLoss; totalAtkLoss += aLoss; totalDefLoss += dLoss;
+      rounds++; lastAtkDice = ad; lastDefDice = dd2; lastALoss = aLoss; lastDLoss = dLoss;
+    }
+    const conquered = defA <= 0;
+    const moved     = conquered ? Math.min(Math.min(3, from.armies - totalAtkLoss - 1), atkA - 1) : 0;
+    territories[fromT] = { ...from, armies: atkA - moved };
+    territories[toT]   = conquered ? { ...to, owner:from.owner, armies:moved } : { ...to, armies:defA };
+    attackResult = {
+      attackerDice:atkA>0?lastAtkDice:[], defenderDice:lastDefDice,
+      attackerLosses:lastALoss, defenderLosses:lastDLoss,
+      isBlitz:true, rounds, totalAttackerLosses:totalAtkLoss, totalDefenderLosses:totalDefLoss,
+      territoryConquered:conquered,
+    };
+  } else {
+    const nd = Math.min(3, from.armies - 1), dd = Math.min(2, to.armies);
+    const atkDice = rollDice(nd), defDice = rollDice(dd);
+    const { aLoss, dLoss } = resolveAttack(atkDice, defDice);
+    const newAtk = from.armies - aLoss, newDef = to.armies - dLoss;
+    const conquered = newDef <= 0;
+    const moved     = conquered ? Math.min(nd, newAtk - 1) : 0;
+    territories[fromT] = { ...from, armies: newAtk - moved };
+    territories[toT]   = conquered ? { ...to, owner:from.owner, armies:moved } : { ...to, armies:newDef };
+    attackResult = { attackerDice:atkDice, defenderDice:defDice, attackerLosses:aLoss, defenderLosses:dLoss, isBlitz:false, territoryConquered:conquered };
+  }
+  return { ...gs, territories, attackResult };
+}
+ 
+function applyFortify(gs, fromT, toT, armies) {
+  const from = gs.territories[fromT];
+  if (!from || armies < 1) return nextTurn(gs);
+  const actual = Math.min(armies, from.armies - 1);
+  const territories = {
+    ...gs.territories,
+    [fromT]: { ...from, armies: from.armies - actual },
+    [toT]:   { ...gs.territories[toT], armies: gs.territories[toT].armies + actual },
+  };
+  return nextTurn({ ...gs, territories });
+}
+ 
+// Router de acciones para el sistema P2P
+function applyAction(gs, action) {
+  switch (action.type) {
+    case 'reinforce':   return applyReinforce(gs, action.territory, action.armies);
+    case 'attack':      return applyAttack(gs, action.from, action.to, action.blitz);
+    case 'end_attack':  return { ...gs, phase:'fortify', attackResult:null, message:'Fase de Fortalecer — mueve ejércitos (opcional)' };
+    case 'fortify':     return applyFortify(gs, action.from, action.to, action.armies);
+    case 'skip_fortify':return nextTurn(gs);
+    default:            return gs;
+  }
+}
+ 
+// ─── STYLES ──────────────────────────────────────────────────────────
+const btn = (bg, hl) => ({
+  background: `linear-gradient(180deg,${hl} 0%,${bg} 100%)`,
+  color:'#fff', border:`1px solid ${hl}66`, borderRadius:'8px',
+  padding:'11px 20px', cursor:'pointer', fontWeight:'bold', fontSize:'15px', width:'100%',
+  textShadow:'0 1px 3px rgba(0,0,0,0.6)', boxShadow:`0 4px 12px ${bg}88`,
+});
+const inp = {
+  background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,215,0,0.3)',
+  borderRadius:'8px', padding:'10px 14px', color:'#fff', fontSize:'15px',
+  width:'100%', outline:'none', boxSizing:'border-box',
+};
+const smBtn = {
+  background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.25)',
+  borderRadius:'4px', color:'#fff', width:'26px', height:'26px', cursor:'pointer',
+  fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+};
+const phaseLabel = p => ({ reinforce:'Refuerzo', attack:'Ataque', fortify:'Fortalecer', ended:'FIN' })[p] || p;
+ 
 // ─── SVG MAP ──────────────────────────────────────────────────────────
 function WorldMapSvg({ gameState, selectedFrom, selectedTo, onTerritoryClick }) {
-  const {territories, players} = gameState;
-  const territoryMap={};
-  Object.values(territories).forEach(t=>{ territoryMap[t.id]=t; });
-  const playerColorMap={};
-  players.forEach(p=>{ playerColorMap[p.id]=p.color; });
+  const { territories, players } = gameState;
+  const territoryMap  = {};
+  Object.values(territories).forEach(t => { territoryMap[t.id] = t; });
+  const playerColorMap = {};
+  players.forEach(p => { playerColorMap[p.id] = p.color; });
   const fromOwner = selectedFrom ? territoryMap[selectedFrom]?.owner : null;
-
+ 
   return (
-    <svg viewBox="0 0 880 500" preserveAspectRatio="xMidYMid meet" style={{width:"100%",height:"100%",display:"block"}}>
+    <svg viewBox="0 0 880 500" preserveAspectRatio="xMidYMid meet" style={{width:'100%',height:'100%',display:'block'}}>
       <defs>
         <linearGradient id="oceanGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#0a1e35"/>
-          <stop offset="50%" stopColor="#0d2848"/>
+          <stop offset="0%"   stopColor="#0a1e35"/>
+          <stop offset="50%"  stopColor="#0d2848"/>
           <stop offset="100%" stopColor="#091828"/>
         </linearGradient>
         <filter id="glow">
@@ -360,12 +597,8 @@ function WorldMapSvg({ gameState, selectedFrom, selectedTo, onTerritoryClick }) 
       </defs>
       <rect width="880" height="500" fill="url(#oceanGrad)"/>
       <g opacity="0.14">
-        {Array.from({length:15},(_,i)=>i*60).map(x=>(
-          <line key={"v"+x} x1={x} y1={0} x2={x} y2={500} stroke="#9fd0ff" strokeOpacity="0.08"/>
-        ))}
-        {Array.from({length:9},(_,i)=>i*60).map(y=>(
-          <line key={"h"+y} x1={0} y1={y} x2={880} y2={y} stroke="#9fd0ff" strokeOpacity="0.08"/>
-        ))}
+        {Array.from({length:15},(_,i)=>i*60).map(x=><line key={"v"+x} x1={x} y1={0} x2={x} y2={500} stroke="#9fd0ff" strokeOpacity="0.08"/>)}
+        {Array.from({length:9},(_,i)=>i*60).map(y=><line key={"h"+y} x1={0} y1={y} x2={880} y2={y} stroke="#9fd0ff" strokeOpacity="0.08"/>)}
       </g>
       <g pointerEvents="none">
         {Object.entries(CONTINENT_SHAPES).map(([name,shape])=>(
@@ -385,30 +618,27 @@ function WorldMapSvg({ gameState, selectedFrom, selectedTo, onTerritoryClick }) 
       </g>
       <g>
         {Object.entries(TERRITORY_POSITIONS).map(([tid,pos])=>{
-          const ts=territoryMap[tid];
-          const cont=TERRITORY_CONTINENT[tid];
-          const baseColor=CONTINENT_COLORS[cont]||"#556677";
-          const ownerColor=ts?(playerColorMap[ts.owner]||baseColor):baseColor;
-          const isFrom=tid===selectedFrom;
-          const isTo=tid===selectedTo;
-          const isNbr=selectedFrom?(NEIGHBORS[selectedFrom]||[]).includes(tid):false;
-          const isAttackable=isNbr&&ts&&ts.owner!==fromOwner;
-          const path=pointsPath(makeTerritoryPolygon(tid));
+          const ts    = territoryMap[tid];
+          const cont  = TERRITORY_CONTINENT[tid];
+          const base  = CONTINENT_COLORS[cont]||"#556677";
+          const owner = ts ? (playerColorMap[ts.owner]||base) : base;
+          const isFrom = tid===selectedFrom;
+          const isTo   = tid===selectedTo;
+          const isNbr  = selectedFrom ? (NEIGHBORS[selectedFrom]||[]).includes(tid) : false;
+          const isAtk  = isNbr && ts && ts.owner !== fromOwner;
+          const path   = pointsPath(makeTerritoryPolygon(tid));
           return (
-            <g key={tid} style={{cursor:"pointer"}} onClick={()=>onTerritoryClick(tid)}>
-              <path d={path} fill={isFrom?"#fff6bf":ownerColor} fillOpacity={isTo?0.98:ts?0.90:0.78}
-                stroke={isFrom?"#FFD700":isTo?"#ff4444":isAttackable?"rgba(255,200,0,0.7)":"rgba(0,0,0,0.45)"}
-                strokeWidth={isFrom||isTo?2.4:isAttackable?1.6:1} filter={isFrom||isTo?"url(#glow)":undefined}/>
-              <circle cx={pos.x} cy={pos.y} r={isFrom||isTo?19:15}
-                fill={isFrom?"#fff6bf":ownerColor} fillOpacity="0.95"
+            <g key={tid} style={{cursor:'pointer'}} onClick={()=>onTerritoryClick(tid)}>
+              <path d={path} fill={isFrom?"#fff6bf":owner} fillOpacity={isTo?0.98:ts?0.90:0.78}
+                stroke={isFrom?"#FFD700":isTo?"#ff4444":isAtk?"rgba(255,200,0,0.7)":"rgba(0,0,0,0.45)"}
+                strokeWidth={isFrom||isTo?2.4:isAtk?1.6:1} filter={isFrom||isTo?"url(#glow)":undefined}/>
+              <circle cx={pos.x} cy={pos.y} r={isFrom||isTo?19:15} fill={isFrom?"#fff6bf":owner} fillOpacity="0.95"
                 stroke={isFrom?"#FFD700":isTo?"#ff4444":"rgba(255,255,255,0.55)"}
                 strokeWidth={isFrom||isTo?2:1.2} filter={isFrom||isTo?"url(#glow)":undefined}/>
-              <text x={pos.x} y={pos.y+1} textAnchor="middle" dominantBaseline="middle"
-                fontSize="10" fontWeight="700" fill={isFrom?"#000":"#fff"}>
+              <text x={pos.x} y={pos.y+1} textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="700" fill={isFrom?"#000":"#fff"}>
                 {ts?ts.armies:"?"}
               </text>
-              <text x={pos.x} y={pos.y+25} textAnchor="middle" fontSize="8" fontWeight="700"
-                fill="rgba(255,255,255,0.9)">{pos.label}</text>
+              <text x={pos.x} y={pos.y+25} textAnchor="middle" fontSize="8" fontWeight="700" fill="rgba(255,255,255,0.9)">{pos.label}</text>
             </g>
           );
         })}
@@ -416,21 +646,16 @@ function WorldMapSvg({ gameState, selectedFrom, selectedTo, onTerritoryClick }) 
       <g pointerEvents="none" opacity="0.85">
         {selectedFrom&&(NEIGHBORS[selectedFrom]||[]).map(nid=>{
           const p=TERRITORY_POSITIONS[nid]; if(!p) return null;
-          return <circle key={"ring-"+nid} cx={p.x} cy={p.y} r={20} fill="none"
-            stroke="rgba(255,200,0,0.75)" strokeWidth="2" strokeDasharray="5 4"/>;
+          return <circle key={"ring-"+nid} cx={p.x} cy={p.y} r={20} fill="none" stroke="rgba(255,200,0,0.75)" strokeWidth="2" strokeDasharray="5 4"/>;
         })}
       </g>
     </svg>
   );
 }
-
-// ─── DICE ───────────────────────────────────────────────────────────
-function Die({value, color}) {
-  const dots = {
-    1:[[50,50]],2:[[25,25],[75,75]],3:[[25,25],[50,50],[75,75]],
-    4:[[25,25],[75,25],[25,75],[75,75]],5:[[25,25],[75,25],[50,50],[25,75],[75,75]],
-    6:[[25,20],[75,20],[25,50],[75,50],[25,80],[75,80]]
-  }[value]||[[50,50]];
+ 
+// ─── DICE ──────────────────────────────────────────────────────────
+function Die({ value, color }) {
+  const dots = {1:[[50,50]],2:[[25,25],[75,75]],3:[[25,25],[50,50],[75,75]],4:[[25,25],[75,25],[25,75],[75,75]],5:[[25,25],[75,25],[50,50],[25,75],[75,75]],6:[[25,20],[75,20],[25,50],[75,50],[25,80],[75,80]]}[value]||[[50,50]];
   return (
     <svg width="36" height="36" viewBox="0 0 100 100">
       <rect x="2" y="2" width="96" height="96" rx="14" fill={color} stroke="rgba(255,255,255,0.4)" strokeWidth="3"/>
@@ -438,46 +663,67 @@ function Die({value, color}) {
     </svg>
   );
 }
-
-// ─── STYLES ──────────────────────────────────────────────────────────
-const btn = (bg, hl) => ({
-  background:`linear-gradient(180deg,${hl} 0%,${bg} 100%)`,
-  color:"#fff",border:`1px solid ${hl}66`,borderRadius:"8px",
-  padding:"11px 20px",cursor:"pointer",fontWeight:"bold",fontSize:"15px",width:"100%",
-  textShadow:"0 1px 3px rgba(0,0,0,0.6)",boxShadow:`0 4px 12px ${bg}88`,
-});
-const inp = {
-  background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,215,0,0.3)",
-  borderRadius:"8px",padding:"10px 14px",color:"#fff",fontSize:"15px",
-  width:"100%",outline:"none",boxSizing:"border-box",
-};
-const smBtn = {
-  background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.25)",
-  borderRadius:"4px",color:"#fff",width:"26px",height:"26px",cursor:"pointer",
-  fontSize:"16px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-};
-
-const phaseLabel = p=>({reinforce:"Refuerzo",attack:"Ataque",fortify:"Fortalecer",ended:"FIN"})[p]||p;
-
-// ─── HOME & ONLINE SCREENS ────────────────────────────────────────────
-function HomeScreen({onStart, onOnline}) {
+ 
+// ─── ATTACK RESULT PANEL ──────────────────────────────────────────
+function AttackResultPanel({ result }) {
   return (
-    <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#050d1a 0%,#0d2137 50%,#051020 100%)"}}>
-      <div style={{textAlign:"center",padding:"40px 20px"}}>
-        <div style={{background:"linear-gradient(135deg,#1a0000 0%,#8B0000 50%,#1a0000 100%)",border:"3px solid #FFD700",borderRadius:"16px",padding:"20px 48px",marginBottom:"20px",display:"inline-block"}}>
-          <div style={{color:"#FFD700",fontSize:"72px",fontFamily:"Georgia,serif",fontWeight:"bold",textShadow:"0 0 30px #ff6600",lineHeight:1}}>RISK</div>
-          <div style={{color:"rgba(255,215,0,0.7)",fontSize:"18px",fontFamily:"Georgia,serif",marginTop:"8px"}}>DOMINACIÓN MUNDIAL</div>
+    <div style={{background:'rgba(100,0,0,0.2)',border:'1px solid #cc2200',borderRadius:'8px',padding:'10px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'8px'}}>
+        <span style={{color:'#ff6666',fontSize:'11px',fontWeight:'bold'}}>{result.isBlitz?'RESULTADO BLITZ':'RESULTADO ATAQUE'}</span>
+        {result.isBlitz&&<span style={{color:'#ff9966',fontSize:'10px'}}>({result.rounds} rondas)</span>}
+      </div>
+      <div style={{display:'flex',gap:'10px',marginBottom:'8px'}}>
+        <div>
+          <p style={{color:'#ff8888',fontSize:'9px',marginBottom:'4px',textTransform:'uppercase'}}>Atacante:</p>
+          <div style={{display:'flex',gap:'3px',flexWrap:'wrap'}}>{result.attackerDice.map((d,i)=><Die key={i} value={d} color="#cc2200"/>)}</div>
         </div>
-        <p style={{color:"#aabbcc",fontSize:"15px",marginBottom:"36px",letterSpacing:"3px"}}>CONQUISTA EL MUNDO</p>
-        <div style={{display:"flex",gap:"12px",justifyContent:"center",flexWrap:"wrap"}}>
-          <button onClick={onStart} style={{...btn("#8B0000","#cc2200"),fontSize:"18px",padding:"14px 40px",width:"auto"}}>⚔️ Jugar</button>
-          <button onClick={onOnline} style={{...btn("#003366","#1a7ccc"),fontSize:"18px",padding:"14px 40px",width:"auto"}}>🌐 Online</button>
+        <div>
+          <p style={{color:'#8888ff',fontSize:'9px',marginBottom:'4px',textTransform:'uppercase'}}>Defensor:</p>
+          <div style={{display:'flex',gap:'3px',flexWrap:'wrap'}}>{result.defenderDice.map((d,i)=><Die key={i} value={d} color="#1a5c9e"/>)}</div>
         </div>
-        <div style={{marginTop:"36px",display:"flex",gap:"18px",justifyContent:"center",flexWrap:"wrap"}}>
+      </div>
+      {result.isBlitz?(
+        <div style={{display:'flex',gap:'8px'}}>
+          <div style={{flex:1,background:'rgba(200,0,0,0.2)',borderRadius:'5px',padding:'5px',textAlign:'center'}}>
+            <p style={{color:'#ff8888',fontSize:'9px'}}>Bajas atacante</p>
+            <p style={{color:'#ff4444',fontSize:'18px',fontWeight:'bold'}}>{result.totalAttackerLosses}</p>
+          </div>
+          <div style={{flex:1,background:'rgba(0,0,200,0.2)',borderRadius:'5px',padding:'5px',textAlign:'center'}}>
+            <p style={{color:'#8888ff',fontSize:'9px'}}>Bajas defensor</p>
+            <p style={{color:'#4488ff',fontSize:'18px',fontWeight:'bold'}}>{result.totalDefenderLosses}</p>
+          </div>
+        </div>
+      ):(
+        <p style={{color:'#ffaaaa',fontSize:'10px'}}>Atacante -{result.attackerLosses} | Defensor -{result.defenderLosses}</p>
+      )}
+      <div style={{marginTop:'6px',background:result.territoryConquered?'rgba(255,215,0,0.15)':'rgba(100,100,100,0.15)',borderRadius:'5px',padding:'5px',textAlign:'center'}}>
+        <p style={{color:result.territoryConquered?'#FFD700':'#aaaaaa',fontSize:'12px',fontWeight:result.territoryConquered?'bold':'normal'}}>
+          {result.territoryConquered?'🏆 TERRITORIO CONQUISTADO!':'El defensor resistió'}
+        </p>
+      </div>
+    </div>
+  );
+}
+ 
+// ─── HOME SCREEN ──────────────────────────────────────────────────
+function HomeScreen({ onStart, onOnline }) {
+  return (
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#050d1a 0%,#0d2137 50%,#051020 100%)'}}>
+      <div style={{textAlign:'center',padding:'40px 20px'}}>
+        <div style={{background:'linear-gradient(135deg,#1a0000 0%,#8B0000 50%,#1a0000 100%)',border:'3px solid #FFD700',borderRadius:'16px',padding:'20px 48px',marginBottom:'20px',display:'inline-block'}}>
+          <div style={{color:'#FFD700',fontSize:'72px',fontFamily:'Georgia,serif',fontWeight:'bold',textShadow:'0 0 30px #ff6600',lineHeight:1}}>RISK</div>
+          <div style={{color:'rgba(255,215,0,0.7)',fontSize:'18px',fontFamily:'Georgia,serif',marginTop:'8px'}}>DOMINACIÓN MUNDIAL</div>
+        </div>
+        <p style={{color:'#aabbcc',fontSize:'15px',marginBottom:'36px',letterSpacing:'3px'}}>CONQUISTA EL MUNDO</p>
+        <div style={{display:'flex',gap:'12px',justifyContent:'center',flexWrap:'wrap'}}>
+          <button onClick={onStart} style={{...btn('#8B0000','#cc2200'),fontSize:'18px',padding:'14px 40px',width:'auto'}}>⚔️ Jugar Local</button>
+          <button onClick={onOnline} style={{...btn('#003366','#1a7ccc'),fontSize:'18px',padding:'14px 40px',width:'auto'}}>🌐 Online P2P</button>
+        </div>
+        <div style={{marginTop:'36px',display:'flex',gap:'18px',justifyContent:'center',flexWrap:'wrap'}}>
           {PLAYER_COLORS.map(c=>(
-            <div key={c} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}}>
-              <div style={{width:"16px",height:"16px",borderRadius:"50%",background:c,boxShadow:`0 0 8px ${c}`}}/>
-              <span style={{color:"#556677",fontSize:"10px"}}>{COLOR_NAMES[c]}</span>
+            <div key={c} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+              <div style={{width:'16px',height:'16px',borderRadius:'50%',background:c,boxShadow:`0 0 8px ${c}`}}/>
+              <span style={{color:'#556677',fontSize:'10px'}}>{COLOR_NAMES[c]}</span>
             </div>
           ))}
         </div>
@@ -485,420 +731,537 @@ function HomeScreen({onStart, onOnline}) {
     </div>
   );
 }
-
-function OnlineScreen({onBack, myPeerId, onCreateRoom, onJoinRoom}) {
-  const [playerName, setPlayerName] = useState("");
-  const [hostId, setHostId] = useState("");
-
+ 
+// ─── ONLINE HOME SCREEN (crear o unirse con P2P) ───────────────────
+function OnlineHomeScreen({ onBack, onP2PReady }) {
+  const [name, setName]       = useState('');
+  const [code, setCode]       = useState('');
+  const [tab, setTab]         = useState('create');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]         = useState('');
+ 
+  const handleCreate = async () => {
+    if (!name.trim()) { setErr('Ingresa tu nombre'); return; }
+    setLoading(true); setErr('');
+    const p2p = new P2PManager();
+    try {
+      const roomCode = await p2p.createRoom(name.trim());
+      onP2PReady(p2p, roomCode, true);
+    } catch (e) {
+      setErr('Error al crear sala: ' + (e.message || e.type || 'desconocido'));
+      p2p.destroy();
+      setLoading(false);
+    }
+  };
+ 
+  const handleJoin = async () => {
+    if (!name.trim()) { setErr('Ingresa tu nombre'); return; }
+    if (!code.trim()) { setErr('Ingresa el código de sala'); return; }
+    setLoading(true); setErr('');
+    const p2p = new P2PManager();
+    try {
+      await p2p.joinRoom(code.trim().toUpperCase(), name.trim());
+      onP2PReady(p2p, code.trim().toUpperCase(), false);
+    } catch (e) {
+      setErr('No se pudo conectar: ' + (e.message || e.type || 'verifica el código e inténtalo de nuevo'));
+      p2p.destroy();
+      setLoading(false);
+    }
+  };
+ 
+  const tabStyle = (t) => ({
+    flex:1, padding:'10px', borderRadius:'8px', cursor:'pointer', fontSize:'14px', fontWeight:'bold',
+    border:`1px solid ${tab===t?'#FFD700':'rgba(255,255,255,0.1)'}`,
+    background: tab===t?'rgba(255,215,0,0.15)':'transparent',
+    color: tab===t?'#FFD700':'#556677',
+  });
+ 
   return (
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"linear-gradient(135deg,#050d1a 0%,#0d2137 100%)"}}>
-      <div style={{background:"rgba(0,0,0,0.8)",border:"2px solid rgba(255,215,0,0.4)",borderRadius:"16px",padding:"32px",maxWidth:"600px",width:"100%"}}>
-        <button onClick={onBack} style={{background:"none",border:"none",color:"#556677",cursor:"pointer",fontSize:"13px",padding:0,marginBottom:"16px"}}>← Volver</button>
-        <h2 style={{color:"#FFD700",fontSize:"26px",fontFamily:"Georgia,serif",textAlign:"center",marginBottom:"24px"}}>🌐 Modo P2P Online</h2>
-        
-        <div style={{background:"rgba(255,215,0,0.08)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:"8px",padding:"16px",marginBottom:"24px"}}>
-          <p style={{color:"#FFD700",fontSize:"12px",fontWeight:"bold",marginBottom:"8px"}}>Tu ID P2P:</p>
-          <p style={{color:"#88aaff",fontSize:"14px",wordBreak:"break-all",fontFamily:"monospace"}}>{myPeerId || "Conectando..."}</p>
-          <button onClick={() => myPeerId && navigator.clipboard.writeText(myPeerId)} style={{...btn("#003366","#1a7ccc"),marginTop:"8px",fontSize:"12px"}}>📋 Copiar ID</button>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',background:'linear-gradient(135deg,#050d1a 0%,#0d2137 100%)'}}>
+      <div style={{background:'rgba(0,0,0,0.85)',border:'2px solid rgba(255,215,0,0.4)',borderRadius:'16px',padding:'32px',maxWidth:'440px',width:'100%'}}>
+        <button onClick={onBack} style={{background:'none',border:'none',color:'#556677',cursor:'pointer',fontSize:'13px',padding:0,marginBottom:'16px'}}>← Volver</button>
+        <h2 style={{color:'#FFD700',fontSize:'24px',fontFamily:'Georgia,serif',textAlign:'center',marginBottom:'6px'}}>🌐 Online P2P</h2>
+        <p style={{color:'#445566',fontSize:'12px',textAlign:'center',marginBottom:'24px'}}>Conexión directa entre dispositivos via WebRTC</p>
+ 
+        <input value={name} onChange={e=>setName(e.target.value)} maxLength={20} placeholder="Tu nombre de jugador"
+          style={{...inp,marginBottom:'16px'}} onKeyDown={e=>e.key==='Enter'&&(tab==='create'?handleCreate():handleJoin())}/>
+ 
+        <div style={{display:'flex',gap:'8px',marginBottom:'20px'}}>
+          <button onClick={()=>setTab('create')} style={tabStyle('create')}>🔨 Crear Sala</button>
+          <button onClick={()=>setTab('join')}   style={tabStyle('join')}>🔗 Unirse</button>
         </div>
-
-        <input value={playerName} onChange={e=>setPlayerName(e.target.value)} maxLength={20} placeholder="Tu nombre" style={{...inp,marginBottom:"16px"}}/>
-
-        <button onClick={() => {if(playerName.trim()) onCreateRoom(playerName);}} style={{...btn("#226600","#33aa00"),marginBottom:"16px"}}>🔨 Crear Sala (Ser HOST)</button>
-
-        <div style={{borderTop:"1px solid #334455",paddingTop:"16px"}}>
-          <p style={{color:"#aabbcc",fontSize:"12px",marginBottom:"8px"}}>O únete a una sala existente:</p>
-          <input value={hostId} onChange={e=>setHostId(e.target.value)} placeholder="ID del HOST" style={{...inp,marginBottom:"8px"}}/>
-          <button onClick={() => {if(playerName.trim() && hostId.trim()) onJoinRoom(playerName, hostId);}} style={{...btn("#003366","#1a7ccc")}}>Unirse</button>
-        </div>
+ 
+        {tab === 'create' && (
+          <div style={{background:'rgba(255,215,0,0.06)',border:'1px solid rgba(255,215,0,0.15)',borderRadius:'8px',padding:'12px',marginBottom:'16px'}}>
+            <p style={{color:'#88aacc',fontSize:'12px',lineHeight:'1.6'}}>
+              Se generará un código único. Compártelo con tus amigos para que puedan unirse desde cualquier dispositivo con internet.
+            </p>
+          </div>
+        )}
+ 
+        {tab === 'join' && (
+          <input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} maxLength={10}
+            placeholder="Código de sala (ej: AB1C2D)"
+            style={{...inp,marginBottom:'16px',letterSpacing:'4px',textAlign:'center',fontSize:'20px',fontWeight:'bold'}}
+            onKeyDown={e=>e.key==='Enter'&&handleJoin()}/>
+        )}
+ 
+        {err && <p style={{color:'#ff6666',textAlign:'center',fontSize:'12px',marginBottom:'12px',lineHeight:'1.4'}}>{err}</p>}
+ 
+        <button
+          onClick={tab==='create'?handleCreate:handleJoin}
+          disabled={loading}
+          style={{...btn(tab==='create'?'#226600':'#003366',tab==='create'?'#33aa00':'#1a7ccc'),opacity:loading?0.6:1}}>
+          {loading ? '⏳ Conectando...' : tab==='create' ? '🔨 Crear Sala' : '🔗 Unirse a Sala'}
+        </button>
       </div>
     </div>
   );
 }
-
-function SetupScreen({onStart, onBack}) {
-  const [players, setPlayers] = useState([
-    {name:"Jugador 1",color:PLAYER_COLORS[0]},
-    {name:"Jugador 2",color:PLAYER_COLORS[1]},
-  ]);
-  const [err, setErr] = useState("");
-
-  const addPlayer = () => {
-    if(players.length>=6) return;
-    setPlayers(p=>[...p,{name:`Jugador ${p.length+1}`,color:PLAYER_COLORS[p.length]}]);
+ 
+// ─── ONLINE LOBBY SCREEN ──────────────────────────────────────────
+function OnlineLobbyScreen({ p2p, roomCode, isHost, onBack, onGameStart }) {
+  const [lobbyPlayers, setLobbyPlayers] = useState([...p2p.lobbyPlayers]);
+  const [copied, setCopied]             = useState(false);
+  const [disconnectMsg, setDisconnectMsg] = useState('');
+ 
+  useEffect(() => {
+    p2p.onLobbyUpdate = (players) => setLobbyPlayers([...players]);
+    p2p.onGameStart   = (players, myPlayerId, initialGs) => onGameStart(players, myPlayerId, initialGs);
+    p2p.onDisconnect  = (msg) => setDisconnectMsg(msg);
+    return () => {
+      p2p.onLobbyUpdate = null;
+      // onGameStart y onDisconnect los limpia destroy()
+    };
+  }, [p2p, onGameStart]);
+ 
+  const copyCode = () => {
+    const fallback = () => {
+      const el = document.createElement('textarea');
+      el.value = roomCode;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    };
+    (navigator.clipboard ? navigator.clipboard.writeText(roomCode).catch(fallback) : Promise.resolve(fallback()))
+      .finally(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
-  const removePlayer = i => { if(players.length<=2) return; setPlayers(p=>p.filter((_,j)=>j!==i)); };
-  const updateName = (i,v) => setPlayers(p=>p.map((pl,j)=>j===i?{...pl,name:v}:pl));
-
-  const start = () => {
-    for(const p of players) {
-      if(!p.name.trim()){setErr("Todos los jugadores necesitan nombre");return;}
-    }
-    setErr("");
-    const gamePlayers = players.map((p,i)=>({id:"p"+i,name:p.name.trim(),color:p.color}));
-    onStart(gamePlayers);
+ 
+  const handleStart = () => {
+    if (lobbyPlayers.length < 2) { alert('Necesitas al menos 2 jugadores para empezar'); return; }
+    const { players, myPlayerId, initialGs } = p2p.startGame();
+    onGameStart(players, myPlayerId, initialGs);
   };
-
+ 
+  if (disconnectMsg) return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#050d1a'}}>
+      <div style={{textAlign:'center',padding:'32px'}}>
+        <p style={{color:'#ff6666',fontSize:'20px',marginBottom:'16px'}}>⚠️ {disconnectMsg}</p>
+        <button onClick={onBack} style={{...btn('#8B0000','#cc2200'),width:'auto',padding:'10px 24px'}}>Volver al menú</button>
+      </div>
+    </div>
+  );
+ 
   return (
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"linear-gradient(135deg,#050d1a 0%,#0d2137 100%)"}}>
-      <div style={{background:"rgba(0,0,0,0.8)",border:"2px solid rgba(255,215,0,0.4)",borderRadius:"16px",padding:"32px",maxWidth:"480px",width:"100%"}}>
-        <button onClick={onBack} style={{background:"none",border:"none",color:"#556677",cursor:"pointer",fontSize:"13px",padding:0,marginBottom:"16px"}}>← Volver</button>
-        <h2 style={{color:"#FFD700",fontSize:"26px",fontFamily:"Georgia,serif",textAlign:"center",marginBottom:"24px"}}>Configurar Partida</h2>
-        <p style={{color:"#aabbcc",fontSize:"12px",marginBottom:"14px"}}>Jugadores ({players.length}/6)</p>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',background:'linear-gradient(135deg,#050d1a 0%,#0d2137 100%)'}}>
+      <div style={{background:'rgba(0,0,0,0.85)',border:'2px solid rgba(255,215,0,0.4)',borderRadius:'16px',padding:'32px',maxWidth:'520px',width:'100%'}}>
+        <button onClick={onBack} style={{background:'none',border:'none',color:'#556677',cursor:'pointer',fontSize:'13px',padding:0,marginBottom:'16px'}}>← Salir de la sala</button>
+ 
+        <h2 style={{color:'#FFD700',fontSize:'24px',fontFamily:'Georgia,serif',textAlign:'center',marginBottom:'6px'}}>Sala de Espera</h2>
+        <p style={{color:'#556677',fontSize:'12px',textAlign:'center',marginBottom:'20px'}}>
+          {isHost ? '👑 Eres el host — comparte el código con tus amigos' : '⏳ Esperando que el host inicie...'}
+        </p>
+ 
+        {/* Código de sala */}
+        <div style={{background:'rgba(255,215,0,0.08)',border:'2px solid rgba(255,215,0,0.35)',borderRadius:'12px',padding:'20px',marginBottom:'20px',textAlign:'center'}}>
+          <p style={{color:'#aabbcc',fontSize:'11px',letterSpacing:'2px',textTransform:'uppercase',marginBottom:'10px'}}>Código de Sala</p>
+          <p style={{color:'#FFD700',fontSize:'42px',fontWeight:'bold',letterSpacing:'8px',fontFamily:'monospace',lineHeight:1}}>{roomCode}</p>
+          <button onClick={copyCode} style={{...btn('#223344','#334455'),marginTop:'12px',padding:'7px 20px',fontSize:'12px',width:'auto'}}>
+            {copied ? '✓ ¡Copiado!' : '📋 Copiar código'}
+          </button>
+        </div>
+ 
+        {/* Lista de jugadores */}
+        <div style={{marginBottom:'20px'}}>
+          <p style={{color:'#FFD700',fontSize:'13px',fontWeight:'bold',marginBottom:'10px'}}>Jugadores ({lobbyPlayers.length}/6):</p>
+          {lobbyPlayers.map((p, i) => (
+            <div key={p.peerId || i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'8px',padding:'10px 14px',marginBottom:'6px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                <div style={{width:'12px',height:'12px',borderRadius:'50%',background:PLAYER_COLORS[i],boxShadow:`0 0 8px ${PLAYER_COLORS[i]}`}}/>
+                <div>
+                  <p style={{color:p.isHost?'#FFD700':'#eee',fontSize:'14px',fontWeight:p.isHost?'bold':'normal'}}>{p.name}</p>
+                  <p style={{color:'#445566',fontSize:'11px'}}>{p.isHost?'👑 Host':'Jugador'} · {COLOR_NAMES[PLAYER_COLORS[i]]}</p>
+                </div>
+              </div>
+              {isHost && !p.isHost && (
+                <button onClick={()=>p2p.kickPlayer(p.peerId)}
+                  style={{...btn('#8B0000','#cc2200'),width:'auto',padding:'4px 10px',fontSize:'11px'}}>
+                  Expulsar
+                </button>
+              )}
+            </div>
+          ))}
+          {lobbyPlayers.length < 6 && (
+            <p style={{color:'#334455',fontSize:'11px',textAlign:'center',marginTop:'8px'}}>
+              Esperando más jugadores… (máx. 6)
+            </p>
+          )}
+        </div>
+ 
+        {isHost ? (
+          <button onClick={handleStart} style={btn('#226600','#33aa00')}>
+            ▶️ Iniciar Juego ({lobbyPlayers.length} jugadores)
+          </button>
+        ) : (
+          <div style={{background:'rgba(26,92,158,0.15)',border:'1px solid rgba(26,92,158,0.3)',borderRadius:'8px',padding:'14px',textAlign:'center'}}>
+            <p style={{color:'#88aacc',fontSize:'13px'}}>⏳ Esperando que el host inicie el juego…</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+ 
+// ─── SETUP SCREEN (local) ────────────────────────────────────────
+function SetupScreen({ onStart, onBack }) {
+  const [players, setPlayers] = useState([
+    {name:'Jugador 1',color:PLAYER_COLORS[0]},
+    {name:'Jugador 2',color:PLAYER_COLORS[1]},
+  ]);
+  const [err, setErr] = useState('');
+ 
+  const addPlayer    = () => { if (players.length >= 6) return; setPlayers(p=>[...p,{name:`Jugador ${p.length+1}`,color:PLAYER_COLORS[p.length]}]); };
+  const removePlayer = i  => { if (players.length <= 2) return; setPlayers(p=>p.filter((_,j)=>j!==i)); };
+  const updateName   = (i,v)=> setPlayers(p=>p.map((pl,j)=>j===i?{...pl,name:v}:pl));
+ 
+  const start = () => {
+    for (const p of players) { if (!p.name.trim()) { setErr('Todos los jugadores necesitan nombre'); return; } }
+    setErr('');
+    onStart(players.map((p,i)=>({id:'p'+i,name:p.name.trim(),color:p.color})));
+  };
+ 
+  return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',background:'linear-gradient(135deg,#050d1a 0%,#0d2137 100%)'}}>
+      <div style={{background:'rgba(0,0,0,0.85)',border:'2px solid rgba(255,215,0,0.4)',borderRadius:'16px',padding:'32px',maxWidth:'480px',width:'100%'}}>
+        <button onClick={onBack} style={{background:'none',border:'none',color:'#556677',cursor:'pointer',fontSize:'13px',padding:0,marginBottom:'16px'}}>← Volver</button>
+        <h2 style={{color:'#FFD700',fontSize:'26px',fontFamily:'Georgia,serif',textAlign:'center',marginBottom:'24px'}}>Configurar Partida</h2>
+        <p style={{color:'#aabbcc',fontSize:'12px',marginBottom:'14px'}}>Jugadores ({players.length}/6)</p>
         {players.map((p,i)=>(
-          <div key={i} style={{display:"flex",gap:"8px",alignItems:"center",marginBottom:"8px"}}>
-            <div style={{width:"18px",height:"18px",borderRadius:"50%",background:p.color,flexShrink:0,boxShadow:`0 0 6px ${p.color}`}}/>
-            <input value={p.name} onChange={e=>updateName(i,e.target.value)} maxLength={20} style={{...inp,flex:1,padding:"7px 10px",fontSize:"14px"}}/>
-            {players.length>2&&<button onClick={()=>removePlayer(i)} style={{...smBtn,width:"28px",height:"28px",background:"rgba(180,0,0,0.3)",border:"1px solid #cc2200"}}>✕</button>}
+          <div key={i} style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'8px'}}>
+            <div style={{width:'18px',height:'18px',borderRadius:'50%',background:p.color,flexShrink:0,boxShadow:`0 0 6px ${p.color}`}}/>
+            <input value={p.name} onChange={e=>updateName(i,e.target.value)} maxLength={20}
+              style={{...inp,flex:1,padding:'7px 10px',fontSize:'14px'}}/>
+            {players.length>2&&<button onClick={()=>removePlayer(i)} style={{...smBtn,width:'28px',height:'28px',background:'rgba(180,0,0,0.3)',border:'1px solid #cc2200'}}>✕</button>}
           </div>
         ))}
-        {players.length<6&&(
-          <button onClick={addPlayer} style={{...btn("#223344","#334455"),marginBottom:"16px",fontSize:"13px",padding:"8px"}}>+ Agregar Jugador</button>
-        )}
-        {err&&<p style={{color:"#ff6666",textAlign:"center",fontSize:"13px",marginBottom:"10px"}}>{err}</p>}
-        <button onClick={start} style={btn("#8B0000","#cc2200")}>Iniciar Juego</button>
+        {players.length<6&&<button onClick={addPlayer} style={{...btn('#223344','#334455'),marginBottom:'16px',fontSize:'13px',padding:'8px'}}>+ Agregar Jugador</button>}
+        {err&&<p style={{color:'#ff6666',textAlign:'center',fontSize:'13px',marginBottom:'10px'}}>{err}</p>}
+        <button onClick={start} style={btn('#8B0000','#cc2200')}>⚔️ Iniciar Juego</button>
       </div>
     </div>
   );
 }
-
-// ─── GAME LOGIC ─────────────────────────────────────────────────────────
-function nextTurn(gs) {
-  const alive = gs.turnOrder.filter(pid=>Object.values(gs.territories).some(t=>t.owner===pid));
-  if(alive.length<=1) {
-    return {...gs, phase:"ended", winner:alive[0]||null, message:"¡Juego terminado!"};
-  }
-  let nextIdx = (gs.turnIndex+1)%gs.turnOrder.length;
-  while(!alive.includes(gs.turnOrder[nextIdx])) {
-    nextIdx=(nextIdx+1)%gs.turnOrder.length;
-  }
-  const nextPid = gs.turnOrder[nextIdx];
-  const reinf = calcReinforcements(Object.values(gs.territories), nextPid);
-  return {...gs, phase:"reinforce", currentPlayer:nextPid, turnIndex:nextIdx,
-    reinforcementsLeft:reinf, attackResult:null,
-    message:`Es el turno de ${gs.players.find(p=>p.id===nextPid)?.name||"?"}. Coloca ${reinf} refuerzos.`};
-}
-
-function applyReinforce(gs, toTerritory, armies) {
-  if(!toTerritory||armies<1) return gs;
-  const actual = Math.min(armies, gs.reinforcementsLeft);
-  const territories = {...gs.territories, [toTerritory]:{...gs.territories[toTerritory], armies:gs.territories[toTerritory].armies+actual}};
-  const left = gs.reinforcementsLeft - actual;
-  const newGs = {...gs, territories, reinforcementsLeft:left};
-  if(left<=0) return {...newGs, phase:"attack", message:"Fase de Ataque — selecciona tu territorio para atacar"};
-  return {...newGs, message:`${left} refuerzos restantes`};
-}
-
-function applyAttack(gs, fromT, toT, blitz=false) {
-  const from = gs.territories[fromT];
-  const to = gs.territories[toT];
-  if(!from||!to) return gs;
-  if(from.armies<2) return gs;
-
-  const territories = {...gs.territories};
-  let totalAtkLoss=0, totalDefLoss=0, rounds=0;
-  let atkDice=[], defDice=[], aLoss=0, dLoss=0;
-
-  if(blitz) {
-    let atkArmies=from.armies, defArmies=to.armies;
-    while(atkArmies>=2&&defArmies>0) {
-      const nd=Math.min(3,atkArmies-1), dd=Math.min(2,defArmies);
-      const ad=rollDice(nd), dd2=rollDice(dd);
-      const {aLoss:al,dLoss:dl}=resolveAttack(ad,dd2);
-      atkArmies-=al; defArmies-=dl; totalAtkLoss+=al; totalDefLoss+=dl;
-      rounds++; atkDice=ad; defDice=dd2; aLoss=al; dLoss=dl;
+ 
+// ─── GAME SCREEN ─────────────────────────────────────────────────────
+function GameScreen({ initialPlayers, initialGameState, onBack, isOnline = false, p2p = null, myPlayerId = null }) {
+  const [gs, setGs]               = useState(() => initialGameState || initGame(initialPlayers));
+  const [selectedFrom, setFrom]   = useState(null);
+  const [selectedTo, setTo]       = useState(null);
+  const [reinforceAmt, setReinAmt]= useState(1);
+  const [fortifyAmt, setFortAmt]  = useState(1);
+  const [showBanner, setShowBanner]= useState(true);
+  const [discMsg, setDiscMsg]     = useState('');
+ 
+  const currentPlayer = gs.players.find(p => p.id === gs.currentPlayer);
+  const isMyTurn      = !isOnline || gs.currentPlayer === myPlayerId;
+  const myPlayer      = isOnline ? gs.players.find(p => p.id === myPlayerId) : null;
+ 
+  // ── P2P callbacks ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isOnline || !p2p) return;
+ 
+    // Cliente: recibe el nuevo estado del juego desde el host
+    p2p.onGameStateUpdate = (newGs) => {
+      setGs(newGs);
+      setFrom(null);
+      setTo(null);
+    };
+ 
+    // Host: recibe acciones de los clientes, las valida y aplica
+    if (p2p.isHost) {
+      p2p.onGameAction = (action, senderPeerId) => {
+        setGs(prevGs => {
+          // Validar que sea el turno del jugador que envía
+          const sender = prevGs.players.find(pl => pl.peerId === senderPeerId);
+          if (!sender || prevGs.currentPlayer !== sender.id) return prevGs;
+          const newGs = applyAction(prevGs, action);
+          p2p.broadcastGameState(newGs);
+          return newGs;
+        });
+      };
     }
-    const conquered=defArmies<=0;
-    territories[fromT]={...from,armies:from.armies-totalAtkLoss-(conquered?Math.min(3,from.armies-totalAtkLoss-1):0)};
-    if(conquered) territories[toT]={...to,owner:from.owner,armies:Math.min(3,from.armies-totalAtkLoss-1)};
-    else territories[toT]={...to,armies:defArmies};
-    const attackResult={attackerDice:atkDice,defenderDice:defDice,attackerLosses:aLoss,defenderLosses:dLoss,isBlitz:true,totalAttackerLosses:totalAtkLoss,totalDefenderLosses:totalDefLoss,rounds,territoryConquered:conquered};
-    return {...gs,territories,attackResult};
-  } else {
-    const nd=Math.min(3,from.armies-1), dd=Math.min(2,to.armies);
-    atkDice=rollDice(nd); defDice=rollDice(dd);
-    const res=resolveAttack(atkDice,defDice);
-    aLoss=res.aLoss; dLoss=res.dLoss;
-    const newAtkArmies=from.armies-aLoss;
-    const newDefArmies=to.armies-dLoss;
-    const conquered=newDefArmies<=0;
-    territories[fromT]={...from,armies:newAtkArmies-(conquered?Math.min(nd,newAtkArmies-1):0)};
-    if(conquered) territories[toT]={...to,owner:from.owner,armies:Math.min(nd,newAtkArmies-1)};
-    else territories[toT]={...to,armies:newDefArmies};
-    const attackResult={attackerDice:atkDice,defenderDice:defDice,attackerLosses:aLoss,defenderLosses:dLoss,isBlitz:false,territoryConquered:conquered};
-    return {...gs,territories,attackResult};
-  }
-}
-
-function applyFortify(gs, fromT, toT, armies) {
-  const from = gs.territories[fromT];
-  if(!from||armies<1) return nextTurn(gs);
-  const actual=Math.min(armies,from.armies-1);
-  const territories={...gs.territories,
-    [fromT]:{...from,armies:from.armies-actual},
-    [toT]:{...gs.territories[toT],armies:gs.territories[toT].armies+actual}
-  };
-  return nextTurn({...gs,territories});
-}
-
-function AttackResultPanel({result}) {
-  return (
-    <div style={{background:"rgba(100,0,0,0.2)",border:"1px solid #cc2200",borderRadius:"8px",padding:"10px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"8px"}}>
-        <span style={{color:"#ff6666",fontSize:"11px",fontWeight:"bold"}}>{result.isBlitz?"RESULTADO BLITZ":"RESULTADO ATAQUE"}</span>
-        {result.isBlitz&&<span style={{color:"#ff9966",fontSize:"10px"}}>({result.rounds} rondas)</span>}
-      </div>
-      <div style={{display:"flex",gap:"10px",marginBottom:"8px"}}>
-        <div>
-          <p style={{color:"#ff8888",fontSize:"9px",marginBottom:"4px",textTransform:"uppercase"}}>Atacante:</p>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-            {result.attackerDice.map((d,i)=><Die key={i} value={d} color="#cc2200"/>)}
-          </div>
-        </div>
-        <div>
-          <p style={{color:"#8888ff",fontSize:"9px",marginBottom:"4px",textTransform:"uppercase"}}>Defensor:</p>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-            {result.defenderDice.map((d,i)=><Die key={i} value={d} color="#1a5c9e"/>)}
-          </div>
-        </div>
-      </div>
-      {result.isBlitz?(
-        <div style={{display:"flex",gap:"8px"}}>
-          <div style={{flex:1,background:"rgba(200,0,0,0.2)",borderRadius:"5px",padding:"5px",textAlign:"center"}}>
-            <p style={{color:"#ff8888",fontSize:"9px"}}>Bajas atacante</p>
-            <p style={{color:"#ff4444",fontSize:"18px",fontWeight:"bold"}}>{result.totalAttackerLosses}</p>
-          </div>
-          <div style={{flex:1,background:"rgba(0,0,200,0.2)",borderRadius:"5px",padding:"5px",textAlign:"center"}}>
-            <p style={{color:"#8888ff",fontSize:"9px"}}>Bajas defensor</p>
-            <p style={{color:"#4488ff",fontSize:"18px",fontWeight:"bold"}}>{result.totalDefenderLosses}</p>
-          </div>
-        </div>
-      ):(
-        <p style={{color:"#ffaaaa",fontSize:"10px"}}>Atacante -{result.attackerLosses} | Defensor -{result.defenderLosses}</p>
-      )}
-      <div style={{marginTop:"6px",background:result.territoryConquered?"rgba(255,215,0,0.15)":"rgba(100,100,100,0.15)",borderRadius:"5px",padding:"5px",textAlign:"center"}}>
-        <p style={{color:result.territoryConquered?"#FFD700":"#aaaaaa",fontSize:"12px",fontWeight:result.territoryConquered?"bold":"normal"}}>
-          {result.territoryConquered?"🏆 TERRITORIO CONQUISTADO!":"El defensor resistió"}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function GameScreen({initialPlayers, onBack}) {
-  const [gs, setGs] = useState(()=>initGame(initialPlayers));
-  const [selectedFrom, setSelectedFrom] = useState(null);
-  const [selectedTo, setSelectedTo] = useState(null);
-  const [reinforceAmt, setReinforceAmt] = useState(1);
-  const [fortifyAmt, setFortifyAmt] = useState(1);
-  const [showTurnBanner, setShowTurnBanner] = useState(true);
-
-  const currentPlayer = gs.players.find(p=>p.id===gs.currentPlayer);
-
-  useEffect(()=>{
-    setShowTurnBanner(true);
-    setSelectedFrom(null);
-    setSelectedTo(null);
-    setReinforceAmt(1);
-    setFortifyAmt(1);
-    const t = setTimeout(()=>setShowTurnBanner(false),2500);
-    return ()=>clearTimeout(t);
-  },[gs.currentPlayer]);
-
-  const handleTerritoryClick = (clicked) => {
-    if(gs.phase==="ended") return;
-    const ts = gs.territories;
-    const clickedT = ts[clicked];
-    if(!clickedT) return;
-
-    if(gs.phase==="reinforce") {
-      if(clickedT.owner===gs.currentPlayer) {
-        setSelectedTo(clicked); setSelectedFrom(null);
-      }
-    } else if(gs.phase==="attack") {
-      if(!selectedFrom) {
-        if(clickedT.owner===gs.currentPlayer&&clickedT.armies>=2) {
-          setSelectedFrom(clicked); setSelectedTo(null);
-        }
+ 
+    p2p.onDisconnect = (msg) => setDiscMsg(msg);
+ 
+    return () => {
+      if (p2p) { p2p.onGameStateUpdate = null; p2p.onGameAction = null; p2p.onDisconnect = null; }
+    };
+  }, [isOnline, p2p]);
+ 
+  // ── Turn banner ───────────────────────────────────────────────────
+  useEffect(() => {
+    setShowBanner(true);
+    const t = setTimeout(() => setShowBanner(false), 2500);
+    return () => clearTimeout(t);
+  }, [gs.currentPlayer]);
+ 
+  // ── Dispatch de acciones (local o P2P) ───────────────────────────
+  const dispatch = useCallback((action) => {
+    if (!isOnline || !p2p) {
+      setGs(prev => applyAction(prev, action));
+      return;
+    }
+    if (p2p.isHost) {
+      setGs(prev => {
+        const newGs = applyAction(prev, action);
+        p2p.broadcastGameState(newGs);
+        return newGs;
+      });
+    } else {
+      p2p.sendAction(action);
+    }
+  }, [isOnline, p2p]);
+ 
+  // ── Click en territorio ───────────────────────────────────────────
+  const onTerritoryClick = (clicked) => {
+    if (!isMyTurn || gs.phase === 'ended') return;
+    const clickedT = gs.territories[clicked];
+    if (!clickedT) return;
+ 
+    if (gs.phase === 'reinforce') {
+      if (clickedT.owner === gs.currentPlayer) { setTo(clicked); setFrom(null); }
+    } else if (gs.phase === 'attack') {
+      if (!selectedFrom) {
+        if (clickedT.owner === gs.currentPlayer && clickedT.armies >= 2) { setFrom(clicked); setTo(null); }
       } else {
-        if(clicked===selectedFrom){setSelectedFrom(null);return;}
-        if(clickedT.owner!==gs.currentPlayer&&(NEIGHBORS[selectedFrom]||[]).includes(clicked)) {
-          setSelectedTo(clicked);
-        } else if(clickedT.owner===gs.currentPlayer&&clickedT.armies>=2) {
-          setSelectedFrom(clicked); setSelectedTo(null);
-        }
+        if (clicked === selectedFrom) { setFrom(null); return; }
+        if (clickedT.owner !== gs.currentPlayer && (NEIGHBORS[selectedFrom]||[]).includes(clicked)) { setTo(clicked); }
+        else if (clickedT.owner === gs.currentPlayer && clickedT.armies >= 2) { setFrom(clicked); setTo(null); }
       }
-    } else if(gs.phase==="fortify") {
-      if(!selectedFrom) {
-        if(clickedT.owner===gs.currentPlayer&&clickedT.armies>=2) {
-          setSelectedFrom(clicked); setSelectedTo(null);
-        }
+    } else if (gs.phase === 'fortify') {
+      if (!selectedFrom) {
+        if (clickedT.owner === gs.currentPlayer && clickedT.armies >= 2) { setFrom(clicked); setTo(null); }
       } else {
-        if(clicked===selectedFrom){setSelectedFrom(null);return;}
-        if(clickedT.owner===gs.currentPlayer&&(NEIGHBORS[selectedFrom]||[]).includes(clicked)) {
-          setSelectedTo(clicked);
-        } else if(clickedT.owner===gs.currentPlayer&&clickedT.armies>=2) {
-          setSelectedFrom(clicked); setSelectedTo(null);
-        }
+        if (clicked === selectedFrom) { setFrom(null); return; }
+        if (clickedT.owner === gs.currentPlayer && (NEIGHBORS[selectedFrom]||[]).includes(clicked)) { setTo(clicked); }
+        else if (clickedT.owner === gs.currentPlayer && clickedT.armies >= 2) { setFrom(clicked); setTo(null); }
       }
     }
   };
-
+ 
+  // ── Acciones ──────────────────────────────────────────────────────
   const doReinforce = (armies) => {
-    if(!selectedTo) return;
-    setGs(g=>applyReinforce(g,selectedTo,armies));
-    setSelectedTo(null); setReinforceAmt(1);
+    if (!selectedTo) return;
+    dispatch({ type:'reinforce', territory:selectedTo, armies });
+    setTo(null); setReinAmt(1);
   };
-
+ 
   const doAttack = (blitz) => {
-    if(!selectedFrom||!selectedTo) return;
-    setGs(g=>applyAttack(g,selectedFrom,selectedTo,blitz));
-    setSelectedFrom(null); setSelectedTo(null);
+    if (!selectedFrom || !selectedTo) return;
+    dispatch({ type:'attack', from:selectedFrom, to:selectedTo, blitz });
+    setFrom(null); setTo(null);
   };
-
-  const doEndAttack = () => {
-    setGs(g=>({...g,phase:"fortify",attackResult:null,message:"Fase de Fortalecer — mueve ejércitos (opcional)"}));
-    setSelectedFrom(null); setSelectedTo(null);
-  };
-
+ 
+  const doEndAttack  = () => { dispatch({ type:'end_attack' });  setFrom(null); setTo(null); };
+  const doSkipFortify= () => { dispatch({ type:'skip_fortify'}); setFrom(null); setTo(null); };
+ 
   const doFortify = () => {
-    if(!selectedFrom||!selectedTo) { setGs(g=>nextTurn(g)); return; }
-    const max=(gs.territories[selectedFrom]?.armies||1)-1;
-    setGs(g=>applyFortify(g,selectedFrom,selectedTo,Math.min(fortifyAmt,max)));
-    setSelectedFrom(null); setSelectedTo(null); setFortifyAmt(1);
+    if (!selectedFrom || !selectedTo) { doSkipFortify(); return; }
+    const max = (gs.territories[selectedFrom]?.armies||1) - 1;
+    dispatch({ type:'fortify', from:selectedFrom, to:selectedTo, armies:Math.min(fortifyAmt,max) });
+    setFrom(null); setTo(null); setFortAmt(1);
   };
-
-  const doSkipFortify = () => { setGs(g=>nextTurn(g)); setSelectedFrom(null); setSelectedTo(null); };
-
-  const fromT = selectedFrom?gs.territories[selectedFrom]:null;
-
+ 
+  const fromT = selectedFrom ? gs.territories[selectedFrom] : null;
+ 
+  // ── Desconexión ───────────────────────────────────────────────────
+  if (discMsg) return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#050d1a'}}>
+      <div style={{textAlign:'center',padding:'32px'}}>
+        <p style={{color:'#ff6666',fontSize:'20px',marginBottom:'8px'}}>⚠️ Desconexión</p>
+        <p style={{color:'#aabbcc',fontSize:'14px',marginBottom:'20px'}}>{discMsg}</p>
+        <button onClick={onBack} style={{...btn('#8B0000','#cc2200'),width:'auto',padding:'10px 24px'}}>Volver al menú</button>
+      </div>
+    </div>
+  );
+ 
   return (
-    <div style={{background:"#050d1a",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:"Arial,sans-serif",position:"relative"}}>
-
-      {showTurnBanner&&gs.phase!=="ended"&&(
-        <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,background:"rgba(0,0,0,0.75)",pointerEvents:"none"}}>
-          <div style={{background:`linear-gradient(135deg,${currentPlayer?.color||"#FFD700"}22,rgba(0,0,0,0.9))`,border:`2px solid ${currentPlayer?.color||"#FFD700"}`,borderRadius:"20px",padding:"32px 48px",textAlign:"center"}}>
-            <p style={{color:"#aabbcc",fontSize:"13px",letterSpacing:"2px",marginBottom:"8px"}}>TURNO DE</p>
-            <p style={{color:currentPlayer?.color||"#FFD700",fontSize:"32px",fontWeight:"bold",fontFamily:"Georgia,serif"}}>{currentPlayer?.name||"?"}</p>
-            <p style={{color:"#556677",fontSize:"12px",marginTop:"8px"}}>Fase: {phaseLabel(gs.phase)}</p>
+    <div style={{background:'#050d1a',minHeight:'100vh',display:'flex',flexDirection:'column',fontFamily:'Arial,sans-serif',position:'relative'}}>
+ 
+      {/* Turn banner */}
+      {showBanner && gs.phase !== 'ended' && (
+        <div style={{position:'fixed',inset:0,display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,background:'rgba(0,0,0,0.78)',pointerEvents:'none'}}>
+          <div style={{background:`linear-gradient(135deg,${currentPlayer?.color||'#FFD700'}22,rgba(0,0,0,0.92))`,border:`2px solid ${currentPlayer?.color||'#FFD700'}`,borderRadius:'20px',padding:'32px 48px',textAlign:'center'}}>
+            <p style={{color:'#aabbcc',fontSize:'13px',letterSpacing:'2px',marginBottom:'8px'}}>TURNO DE</p>
+            <p style={{color:currentPlayer?.color||'#FFD700',fontSize:'32px',fontWeight:'bold',fontFamily:'Georgia,serif'}}>{currentPlayer?.name||'?'}</p>
+            <p style={{color:'#556677',fontSize:'12px',marginTop:'8px'}}>Fase: {phaseLabel(gs.phase)}</p>
+            {isOnline && (
+              <p style={{color:isMyTurn?'#2ecc71':'#e74c3c',fontSize:'13px',fontWeight:'bold',marginTop:'6px'}}>
+                {isMyTurn ? '⚔️ ¡Es tu turno!' : `⏳ Turno de ${currentPlayer?.name}`}
+              </p>
+            )}
           </div>
         </div>
       )}
-
-      <div style={{background:"rgba(0,0,0,0.92)",borderBottom:"2px solid #FFD70055",padding:"7px 14px",display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap",flexShrink:0}}>
-        <span style={{color:"#FFD700",fontFamily:"Georgia,serif",fontSize:"20px",fontWeight:"bold"}}>RISK</span>
-        <div style={{display:"flex",gap:"5px",alignItems:"center",flexWrap:"wrap",flex:1}}>
+ 
+      {/* Top bar */}
+      <div style={{background:'rgba(0,0,0,0.92)',borderBottom:'2px solid #FFD70055',padding:'7px 14px',display:'flex',alignItems:'center',gap:'12px',flexWrap:'wrap',flexShrink:0}}>
+        <span style={{color:'#FFD700',fontFamily:'Georgia,serif',fontSize:'20px',fontWeight:'bold'}}>RISK</span>
+        {isOnline && (
+          <span style={{background:'rgba(26,124,204,0.2)',border:'1px solid #1a7ccc55',borderRadius:'10px',padding:'2px 8px',color:'#88aaff',fontSize:'11px'}}>
+            🌐 {p2p.roomCode} · {myPlayer?.name}
+            {p2p.isHost && <span style={{color:'#FFD700'}}> 👑</span>}
+          </span>
+        )}
+        <div style={{display:'flex',gap:'5px',alignItems:'center',flexWrap:'wrap',flex:1}}>
           {gs.players.map(p=>{
-            const tCount=Object.values(gs.territories).filter(t=>t.owner===p.id).length;
-            const isCur=gs.currentPlayer===p.id;
-            if(tCount===0) return null;
+            const tCount = Object.values(gs.territories).filter(t=>t.owner===p.id).length;
+            const isCur  = gs.currentPlayer === p.id;
+            const isMe   = isOnline && p.id === myPlayerId;
+            if (tCount === 0) return null;
             return (
-              <div key={p.id} style={{display:"flex",alignItems:"center",gap:"4px",padding:"2px 7px",borderRadius:"12px",border:`2px solid ${isCur?p.color:"transparent"}`,background:isCur?`${p.color}22`:"transparent"}}>
-                <div style={{width:"9px",height:"9px",borderRadius:"50%",background:p.color}}/>
-                <span style={{color:p.color,fontSize:"11px",fontWeight:"bold"}}>{p.name}({tCount}){isCur&&" ▶"}</span>
+              <div key={p.id} style={{display:'flex',alignItems:'center',gap:'4px',padding:'2px 7px',borderRadius:'12px',border:`2px solid ${isCur?p.color:isMe?p.color+'55':'transparent'}`,background:isCur?`${p.color}22`:isMe?`${p.color}11`:'transparent'}}>
+                <div style={{width:'9px',height:'9px',borderRadius:'50%',background:p.color}}/>
+                <span style={{color:p.color,fontSize:'11px',fontWeight:'bold'}}>{p.name}{isMe?'(tú)':''} ({tCount}){isCur?' ▶':''}</span>
               </div>
             );
           })}
         </div>
-        <button onClick={onBack} style={{background:"none",border:"1px solid #334455",borderRadius:"6px",color:"#556677",cursor:"pointer",fontSize:"11px",padding:"4px 8px"}}>✕ Salir</button>
+        <button onClick={onBack} style={{background:'none',border:'1px solid #334455',borderRadius:'6px',color:'#556677',cursor:'pointer',fontSize:'11px',padding:'4px 8px'}}>✕ Salir</button>
       </div>
-
-      <div style={{display:"flex",flex:1,overflow:"hidden",minHeight:0}}>
-        <div style={{flex:1,overflow:"hidden",background:"#050d1a"}}>
-          <WorldMapSvg gameState={gs} selectedFrom={selectedFrom} selectedTo={selectedTo} onTerritoryClick={handleTerritoryClick}/>
+ 
+      {/* Map + Sidebar */}
+      <div style={{display:'flex',flex:1,overflow:'hidden',minHeight:0}}>
+ 
+        {/* Map */}
+        <div style={{flex:1,overflow:'hidden',background:'#050d1a',transition:'opacity .2s',opacity:(!isOnline||isMyTurn||gs.phase==='ended')?1:0.80}}>
+          <WorldMapSvg gameState={gs} selectedFrom={selectedFrom} selectedTo={selectedTo} onTerritoryClick={onTerritoryClick}/>
         </div>
-
-        <div style={{width:"270px",minWidth:"270px",background:"rgba(2,8,18,0.97)",borderLeft:"1px solid #FFD70033",display:"flex",flexDirection:"column",padding:"12px",gap:"9px",overflowY:"auto",maxHeight:"100%"}}>
-
-          <div style={{background:`${currentPlayer?.color||"#FFD700"}18`,border:`1px solid ${currentPlayer?.color||"#FFD700"}44`,borderRadius:"8px",padding:"9px"}}>
-            <p style={{color:"#FFD700",fontSize:"10px",fontWeight:"bold",marginBottom:"2px",textTransform:"uppercase",letterSpacing:"1px"}}>Fase: {phaseLabel(gs.phase)}</p>
-            <p style={{color:currentPlayer?.color||"#fff",fontSize:"13px",fontWeight:"bold"}}>{currentPlayer?.name||"?"}</p>
-            <p style={{color:"#88aacc",fontSize:"10px",marginTop:"3px"}}>{gs.message}</p>
+ 
+        {/* Sidebar */}
+        <div style={{width:'270px',minWidth:'270px',background:'rgba(2,8,18,0.97)',borderLeft:'1px solid #FFD70033',display:'flex',flexDirection:'column',padding:'12px',gap:'9px',overflowY:'auto',maxHeight:'100%'}}>
+ 
+          {/* Phase header */}
+          <div style={{background:`${currentPlayer?.color||'#FFD700'}18`,border:`1px solid ${currentPlayer?.color||'#FFD700'}44`,borderRadius:'8px',padding:'9px'}}>
+            <p style={{color:'#FFD700',fontSize:'10px',fontWeight:'bold',marginBottom:'2px',textTransform:'uppercase',letterSpacing:'1px'}}>Fase: {phaseLabel(gs.phase)}</p>
+            <p style={{color:currentPlayer?.color||'#fff',fontSize:'13px',fontWeight:'bold'}}>{currentPlayer?.name||'?'}</p>
+            <p style={{color:'#88aacc',fontSize:'10px',marginTop:'3px'}}>{gs.message}</p>
           </div>
-
-          {gs.winner&&(
-            <div style={{background:"rgba(255,215,0,0.12)",border:"2px solid #FFD700",borderRadius:"10px",padding:"14px",textAlign:"center"}}>
-              <p style={{color:"#FFD700",fontSize:"20px",fontWeight:"bold",fontFamily:"Georgia,serif"}}>🏆 VICTORIA!</p>
-              <p style={{color:"#fff",fontSize:"14px",marginTop:"4px"}}>{gs.players.find(p=>p.id===gs.winner)?.name}</p>
-              <button onClick={onBack} style={{...btn("#8B0000","#cc2200"),marginTop:"10px",padding:"8px 16px",fontSize:"13px"}}>Volver</button>
+ 
+          {/* Online: not my turn */}
+          {isOnline && !isMyTurn && gs.phase !== 'ended' && (
+            <div style={{background:'rgba(20,40,70,0.6)',border:'1px solid rgba(100,140,200,0.25)',borderRadius:'8px',padding:'14px',textAlign:'center'}}>
+              <p style={{color:'#6688aa',fontSize:'11px',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'1px'}}>Esperando</p>
+              <p style={{color:currentPlayer?.color,fontSize:'15px',fontWeight:'bold'}}>{currentPlayer?.name}</p>
+              <p style={{color:'#445566',fontSize:'11px',marginTop:'4px'}}>Fase: {phaseLabel(gs.phase)}</p>
             </div>
           )}
-
-          {!gs.winner&&(
-            <div style={{display:"flex",flexDirection:"column",gap:"7px"}}>
-
-              {gs.phase==="reinforce"&&<>
-                <p style={{color:"#aabbcc",fontSize:"12px"}}>Refuerzos: <strong style={{color:"#FFD700",fontSize:"14px"}}>{gs.reinforcementsLeft}</strong></p>
-                {selectedTo?(
+ 
+          {/* Winner */}
+          {gs.winner && (
+            <div style={{background:'rgba(255,215,0,0.12)',border:'2px solid #FFD700',borderRadius:'10px',padding:'14px',textAlign:'center'}}>
+              <p style={{color:'#FFD700',fontSize:'20px',fontWeight:'bold',fontFamily:'Georgia,serif'}}>🏆 VICTORIA!</p>
+              <p style={{color:'#fff',fontSize:'14px',marginTop:'4px'}}>{gs.players.find(p=>p.id===gs.winner)?.name}</p>
+              {isOnline && gs.winner===myPlayerId && <p style={{color:'#2ecc71',fontSize:'12px',marginTop:'4px'}}>¡Ganaste! 🎉</p>}
+              <button onClick={onBack} style={{...btn('#8B0000','#cc2200'),marginTop:'10px',padding:'8px 16px',fontSize:'13px'}}>Volver</button>
+            </div>
+          )}
+ 
+          {/* Action controls (only when it's my turn) */}
+          {!gs.winner && isMyTurn && (
+            <div style={{display:'flex',flexDirection:'column',gap:'7px'}}>
+ 
+              {/* REINFORCE */}
+              {gs.phase==='reinforce' && <>
+                <p style={{color:'#aabbcc',fontSize:'12px'}}>Refuerzos: <strong style={{color:'#FFD700',fontSize:'14px'}}>{gs.reinforcementsLeft}</strong></p>
+                {selectedTo ? (
                   <>
-                    <p style={{color:"#ccc",fontSize:"11px"}}>Territorio: <strong style={{color:"#FFD700"}}>{TERRITORY_POSITIONS[selectedTo]?.label}</strong></p>
-                    <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                      <button onClick={()=>setReinforceAmt(m=>Math.max(1,m-1))} style={smBtn}>−</button>
-                      <span style={{color:"#FFD700",fontWeight:"bold",minWidth:"26px",textAlign:"center"}}>{Math.min(reinforceAmt,gs.reinforcementsLeft)}</span>
-                      <button onClick={()=>setReinforceAmt(m=>Math.min(gs.reinforcementsLeft,m+1))} style={smBtn}>+</button>
-                      <button onClick={()=>doReinforce(Math.min(reinforceAmt,gs.reinforcementsLeft))} style={{...btn("#226600","#33aa00"),padding:"3px 10px",fontSize:"11px",flex:1}}>Reforzar</button>
+                    <p style={{color:'#ccc',fontSize:'11px'}}>Territorio: <strong style={{color:'#FFD700'}}>{TERRITORY_POSITIONS[selectedTo]?.label}</strong></p>
+                    <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                      <button onClick={()=>setReinAmt(m=>Math.max(1,m-1))} style={smBtn}>−</button>
+                      <span style={{color:'#FFD700',fontWeight:'bold',minWidth:'26px',textAlign:'center'}}>{Math.min(reinforceAmt,gs.reinforcementsLeft)}</span>
+                      <button onClick={()=>setReinAmt(m=>Math.min(gs.reinforcementsLeft,m+1))} style={smBtn}>+</button>
+                      <button onClick={()=>doReinforce(Math.min(reinforceAmt,gs.reinforcementsLeft))} style={{...btn('#226600','#33aa00'),padding:'3px 10px',fontSize:'11px',flex:1}}>Reforzar</button>
                     </div>
-                    <button onClick={()=>doReinforce(gs.reinforcementsLeft)} style={{...btn("#554400","#886600"),fontSize:"11px"}}>Colocar todos ({gs.reinforcementsLeft})</button>
+                    <button onClick={()=>doReinforce(gs.reinforcementsLeft)} style={{...btn('#554400','#886600'),fontSize:'11px'}}>Colocar todos ({gs.reinforcementsLeft})</button>
                   </>
-                ):(
-                  <p style={{color:"#556677",fontSize:"11px"}}>Haz clic en uno de tus territorios para reforzar</p>
+                ) : (
+                  <p style={{color:'#556677',fontSize:'11px'}}>Haz clic en uno de tus territorios para reforzar</p>
                 )}
               </>}
-
-              {gs.phase==="attack"&&<>
-                {!selectedFrom&&<p style={{color:"#556677",fontSize:"11px"}}>Clic en un territorio tuyo (2+ ejércitos) para atacar</p>}
-                {selectedFrom&&!selectedTo&&<p style={{color:"#aabbcc",fontSize:"11px"}}>Desde: <strong style={{color:"#FFD700"}}>{TERRITORY_POSITIONS[selectedFrom]?.label}</strong></p>}
-                {selectedFrom&&selectedTo&&<>
-                  <p style={{color:"#ccc",fontSize:"11px"}}>
-                    <strong style={{color:"#FFD700"}}>{TERRITORY_POSITIONS[selectedFrom]?.label}</strong>
-                    <span style={{color:"#666"}}> vs </span>
-                    <strong style={{color:"#ff4444"}}>{TERRITORY_POSITIONS[selectedTo]?.label}</strong>
+ 
+              {/* ATTACK */}
+              {gs.phase==='attack' && <>
+                {!selectedFrom && <p style={{color:'#556677',fontSize:'11px'}}>Clic en un territorio tuyo (2+ ejércitos) para atacar</p>}
+                {selectedFrom && !selectedTo && <p style={{color:'#aabbcc',fontSize:'11px'}}>Desde: <strong style={{color:'#FFD700'}}>{TERRITORY_POSITIONS[selectedFrom]?.label}</strong></p>}
+                {selectedFrom && selectedTo && <>
+                  <p style={{color:'#ccc',fontSize:'11px'}}>
+                    <strong style={{color:'#FFD700'}}>{TERRITORY_POSITIONS[selectedFrom]?.label}</strong>
+                    <span style={{color:'#666'}}> vs </span>
+                    <strong style={{color:'#ff4444'}}>{TERRITORY_POSITIONS[selectedTo]?.label}</strong>
                   </p>
-                  <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
-                    <button onClick={()=>doAttack(false)} style={btn("#8B0000","#cc2200")}>⚔️ ATACAR (1 ronda)</button>
-                    <button onClick={()=>doAttack(true)} style={{...btn("#6B0000","#ff3300"),boxShadow:"0 4px 15px #ff330055"}}>💥 BLITZ — ATACAR TODO</button>
+                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                    <button onClick={()=>doAttack(false)} style={btn('#8B0000','#cc2200')}>⚔️ ATACAR (1 ronda)</button>
+                    <button onClick={()=>doAttack(true)} style={{...btn('#6B0000','#ff3300'),boxShadow:'0 4px 15px #ff330055'}}>💥 BLITZ — ATACAR TODO</button>
                   </div>
                 </>}
-                <button onClick={doEndAttack} style={{...btn("#443300","#665500"),fontSize:"11px"}}>Terminar ataques →</button>
+                <button onClick={doEndAttack} style={{...btn('#443300','#665500'),fontSize:'11px'}}>Terminar ataques →</button>
               </>}
-
-              {gs.phase==="fortify"&&<>
-                {!selectedFrom&&<p style={{color:"#556677",fontSize:"11px"}}>Opcional: mueve ejércitos entre territorios adyacentes</p>}
-                {selectedFrom&&!selectedTo&&<p style={{color:"#aabbcc",fontSize:"11px"}}>Desde: <strong style={{color:"#FFD700"}}>{TERRITORY_POSITIONS[selectedFrom]?.label}</strong></p>}
-                {selectedFrom&&selectedTo&&(()=>{
-                  const max=(fromT?.armies||1)-1;
+ 
+              {/* FORTIFY */}
+              {gs.phase==='fortify' && <>
+                {!selectedFrom && <p style={{color:'#556677',fontSize:'11px'}}>Opcional: mueve ejércitos entre territorios adyacentes</p>}
+                {selectedFrom && !selectedTo && <p style={{color:'#aabbcc',fontSize:'11px'}}>Desde: <strong style={{color:'#FFD700'}}>{TERRITORY_POSITIONS[selectedFrom]?.label}</strong></p>}
+                {selectedFrom && selectedTo && (()=>{
+                  const max = (fromT?.armies||1) - 1;
                   return <>
-                    <p style={{color:"#ccc",fontSize:"11px"}}>
-                      <strong style={{color:"#FFD700"}}>{TERRITORY_POSITIONS[selectedFrom]?.label}</strong>
-                      <span style={{color:"#666"}}> → </span>
-                      <strong style={{color:"#2ecc71"}}>{TERRITORY_POSITIONS[selectedTo]?.label}</strong>
+                    <p style={{color:'#ccc',fontSize:'11px'}}>
+                      <strong style={{color:'#FFD700'}}>{TERRITORY_POSITIONS[selectedFrom]?.label}</strong>
+                      <span style={{color:'#666'}}> → </span>
+                      <strong style={{color:'#2ecc71'}}>{TERRITORY_POSITIONS[selectedTo]?.label}</strong>
                     </p>
-                    <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                      <button onClick={()=>setFortifyAmt(m=>Math.max(1,m-1))} style={smBtn}>−</button>
-                      <span style={{color:"#FFD700",fontWeight:"bold",minWidth:"26px",textAlign:"center"}}>{Math.min(fortifyAmt,max)}</span>
-                      <button onClick={()=>setFortifyAmt(m=>Math.min(max,m+1))} style={smBtn}>+</button>
+                    <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                      <button onClick={()=>setFortAmt(m=>Math.max(1,m-1))} style={smBtn}>−</button>
+                      <span style={{color:'#FFD700',fontWeight:'bold',minWidth:'26px',textAlign:'center'}}>{Math.min(fortifyAmt,max)}</span>
+                      <button onClick={()=>setFortAmt(m=>Math.min(max,m+1))} style={smBtn}>+</button>
                     </div>
-                    <button onClick={doFortify} style={btn("#226600","#33aa00")}>Fortalecer</button>
+                    <button onClick={doFortify} style={btn('#226600','#33aa00')}>Fortalecer</button>
                   </>;
                 })()}
-                <button onClick={doSkipFortify} style={btn("#003366","#1a5c9e")}>Terminar turno →</button>
+                <button onClick={doSkipFortify} style={btn('#003366','#1a5c9e')}>Terminar turno →</button>
               </>}
             </div>
           )}
-
-          {gs.attackResult&&<AttackResultPanel result={gs.attackResult}/>}
-
-          <div style={{marginTop:"auto",borderTop:"1px solid #112233",paddingTop:"9px"}}>
-            <p style={{color:"#334455",fontSize:"9px",marginBottom:"5px",textTransform:"uppercase",letterSpacing:"1px"}}>Territorios / Ejércitos</p>
-            {gs.players.map(p=>{
-              const tCount=Object.values(gs.territories).filter(t=>t.owner===p.id).length;
-              const aCount=Object.values(gs.territories).filter(t=>t.owner===p.id).reduce((s,t)=>s+t.armies,0);
-              const eliminated=tCount===0;
+ 
+          {/* Attack result */}
+          {gs.attackResult && <AttackResultPanel result={gs.attackResult}/>}
+ 
+          {/* Scoreboard */}
+          <div style={{marginTop:'auto',borderTop:'1px solid #112233',paddingTop:'9px'}}>
+            <p style={{color:'#334455',fontSize:'9px',marginBottom:'5px',textTransform:'uppercase',letterSpacing:'1px'}}>Territorios / Ejércitos</p>
+            {gs.players.map(p => {
+              const tCount = Object.values(gs.territories).filter(t=>t.owner===p.id).length;
+              const aCount = Object.values(gs.territories).filter(t=>t.owner===p.id).reduce((s,t)=>s+t.armies,0);
+              const elim   = tCount === 0;
+              const isMe   = isOnline && p.id === myPlayerId;
               return (
-                <div key={p.id} style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"3px",opacity:eliminated?0.35:1}}>
-                  <div style={{width:"7px",height:"7px",borderRadius:"50%",background:p.color,flexShrink:0}}/>
-                  <span style={{color:p.id===gs.currentPlayer?p.color:"#778899",fontSize:"10px",flex:1}}>{p.name}{eliminated?" ✝":""}</span>
-                  <span style={{color:"#445566",fontSize:"9px"}}>{tCount}t/{aCount}a</span>
+                <div key={p.id} style={{display:'flex',alignItems:'center',gap:'5px',marginBottom:'3px',opacity:elim?0.35:1}}>
+                  <div style={{width:'7px',height:'7px',borderRadius:'50%',background:p.color,flexShrink:0}}/>
+                  <span style={{color:p.id===gs.currentPlayer?p.color:'#778899',fontSize:'10px',flex:1}}>
+                    {p.name}{isMe?' (tú)':''}{elim?' ✝':''}
+                  </span>
+                  <span style={{color:'#445566',fontSize:'9px'}}>{tCount}t/{aCount}a</span>
                 </div>
               );
             })}
@@ -908,60 +1271,67 @@ function GameScreen({initialPlayers, onBack}) {
     </div>
   );
 }
-
-// ─── APP ROOT ─────────────────────────────────────────────────────────
+ 
+// ─── APP ROOT ────────────────────────────────────────────────────────
 function App() {
-  const [screen, setScreen] = useState("home");
-  const [players, setPlayers] = useState(null);
-  const [myPeerId, setMyPeerId] = useState(null);
-
-  useEffect(() => {
-    const unsubStatus = p2pManager.subscribeToStatus((status) => {
-      if (status === 'open') {
-        setMyPeerId(p2pManager.peerId);
-      }
-    });
-
-    return () => {
-      unsubStatus();
-    };
-  }, []);
-
-  if(screen==="home") return <HomeScreen 
-    onStart={()=>setScreen("setup")}
-    onOnline={()=>setScreen("online")}
-  />;
-  
-  if(screen==="online") return <OnlineScreen
-    onBack={()=>setScreen("home")}
-    myPeerId={myPeerId}
-    onCreateRoom={(playerName) => {
-      const gamePlayers = [{id:"p0",name:playerName,color:PLAYER_COLORS[0]}];
-      setPlayers(gamePlayers);
-      setScreen("game");
-    }}
-    onJoinRoom={(playerName, hostId) => {
-      p2pManager.connect(hostId);
-      const gamePlayers = [{id:"p1",name:playerName,color:PLAYER_COLORS[1]}];
-      setPlayers(gamePlayers);
-      setScreen("game");
-    }}
-  />;
-  
-  if(screen==="setup") return <SetupScreen 
-    onStart={ps=>{setPlayers(ps);setScreen("game");}} 
-    onBack={()=>setScreen("home")}
-  />;
-  
-  if(screen==="game"&&players) return <GameScreen 
-    initialPlayers={players} 
-    onBack={()=>{setPlayers(null);setScreen("home");}}
-  />;
-  
+  const [screen, setScreen]               = useState('home');
+  const [players, setPlayers]             = useState(null);
+  const [onlineGameState, setOnlineGs]    = useState(null);
+  const [myPlayerId, setMyPlayerId]       = useState(null);
+  const [p2pInfo, setP2pInfo]             = useState(null); // { roomCode, isHost }
+  const p2pRef = useRef(null);
+ 
+  const handleP2PReady = (p2p, roomCode, isHost) => {
+    p2pRef.current = p2p;
+    setP2pInfo({ roomCode, isHost });
+    setScreen('online-lobby');
+  };
+ 
+  const handleGameStart = (gamePlayers, myPid, initialGs) => {
+    setPlayers(gamePlayers);
+    setMyPlayerId(myPid);
+    setOnlineGs(initialGs);
+    setScreen('online-game');
+  };
+ 
+  const leaveOnline = () => {
+    if (p2pRef.current) { p2pRef.current.destroy(); p2pRef.current = null; }
+    setP2pInfo(null); setPlayers(null); setMyPlayerId(null); setOnlineGs(null);
+    setScreen('home');
+  };
+ 
+  const leaveLobby = () => {
+    if (p2pRef.current) { p2pRef.current.destroy(); p2pRef.current = null; }
+    setP2pInfo(null);
+    setScreen('online-home');
+  };
+ 
+  if (screen === 'home')
+    return <HomeScreen onStart={()=>setScreen('setup')} onOnline={()=>setScreen('online-home')}/>;
+ 
+  if (screen === 'online-home')
+    return <OnlineHomeScreen onBack={()=>setScreen('home')} onP2PReady={handleP2PReady}/>;
+ 
+  if (screen === 'online-lobby' && p2pRef.current && p2pInfo)
+    return <OnlineLobbyScreen
+      p2p={p2pRef.current} roomCode={p2pInfo.roomCode} isHost={p2pInfo.isHost}
+      onBack={leaveLobby} onGameStart={handleGameStart}/>;
+ 
+  if (screen === 'setup')
+    return <SetupScreen onStart={ps=>{setPlayers(ps);setScreen('game');}} onBack={()=>setScreen('home')}/>;
+ 
+  if (screen === 'game' && players)
+    return <GameScreen initialPlayers={players} onBack={()=>{setPlayers(null);setScreen('home');}}/>;
+ 
+  if (screen === 'online-game' && players && onlineGameState)
+    return <GameScreen
+      initialPlayers={players} initialGameState={onlineGameState}
+      onBack={leaveOnline} isOnline={true} p2p={p2pRef.current} myPlayerId={myPlayerId}/>;
+ 
   return null;
 }
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ 
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
