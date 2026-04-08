@@ -135,38 +135,59 @@ const CONTINENT_BLOB_COLORS = {
   australia_main:"#1abc9c",new_guinea:"#1abc9c",
 };
 
-// ─── ONLINE SYSTEM ─────────────────────────────────────────────────────
+// ─── ONLINE SYSTEM CON LOCALSTORAGE ─────────────────────────────────────
 class OnlineRoomManager {
   constructor() {
-    this.rooms = {
-      "1": { id: "1", players: [], host: null, status: "waiting" },
-      "2": { id: "2", players: [], host: null, status: "waiting" },
-      "3": { id: "3", players: [], host: null, status: "waiting" },
-      "4": { id: "4", players: [], host: null, status: "waiting" }
-    };
     this.listeners = [];
+    this.initializeRooms();
+    // Sincronizar con cambios en otras pestañas/dispositivos
+    this.startPolling();
+  }
+
+  initializeRooms() {
+    const stored = localStorage.getItem("risk_rooms");
+    if (!stored) {
+      localStorage.setItem("risk_rooms", JSON.stringify({
+        "1": { id: "1", players: [], host: null, status: "waiting" },
+        "2": { id: "2", players: [], host: null, status: "waiting" },
+        "3": { id: "3", players: [], host: null, status: "waiting" },
+        "4": { id: "4", players: [], host: null, status: "waiting" }
+      }));
+    }
+  }
+
+  getRoomsData() {
+    const stored = localStorage.getItem("risk_rooms");
+    return stored ? JSON.parse(stored) : {};
+  }
+
+  saveRoomsData(rooms) {
+    localStorage.setItem("risk_rooms", JSON.stringify(rooms));
+    this.notifyListeners();
   }
 
   createRoom(roomId, hostId, hostName) {
-    if (this.rooms[roomId] && this.rooms[roomId].players.length === 0) {
-      this.rooms[roomId] = { 
+    const rooms = this.getRoomsData();
+    if (rooms[roomId] && rooms[roomId].players.length === 0) {
+      rooms[roomId] = { 
         id: roomId, 
         players: [{id: hostId, name: hostName, isHost: true}], 
         host: hostId,
         status: "waiting"
       };
-      this.notifyListeners();
+      this.saveRoomsData(rooms);
       return true;
     }
     return false;
   }
 
   joinRoom(roomId, playerId, playerName) {
-    if (this.rooms[roomId] && this.rooms[roomId].players.length < 6 && this.rooms[roomId].status === "waiting") {
-      const exists = this.rooms[roomId].players.some(p => p.id === playerId);
+    const rooms = this.getRoomsData();
+    if (rooms[roomId] && rooms[roomId].players.length < 6 && rooms[roomId].status === "waiting") {
+      const exists = rooms[roomId].players.some(p => p.id === playerId);
       if (!exists) {
-        this.rooms[roomId].players.push({ id: playerId, name: playerName, isHost: false });
-        this.notifyListeners();
+        rooms[roomId].players.push({ id: playerId, name: playerName, isHost: false });
+        this.saveRoomsData(rooms);
         return true;
       }
     }
@@ -174,29 +195,29 @@ class OnlineRoomManager {
   }
 
   getAllRooms() {
-    return Object.values(this.rooms);
+    return Object.values(this.getRoomsData());
   }
 
   getRoomDetails(roomId) {
-    return this.rooms[roomId];
+    return this.getRoomsData()[roomId];
   }
 
   leaveRoom(roomId, playerId) {
-    if (this.rooms[roomId]) {
-      const wasHost = this.rooms[roomId].host === playerId;
-      this.rooms[roomId].players = this.rooms[roomId].players.filter(p => p.id !== playerId);
+    const rooms = this.getRoomsData();
+    if (rooms[roomId]) {
+      const wasHost = rooms[roomId].host === playerId;
+      rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== playerId);
       
-      // Si se va el host, cambiar host al siguiente o limpiar
       if (wasHost) {
-        if (this.rooms[roomId].players.length > 0) {
-          this.rooms[roomId].players[0].isHost = true;
-          this.rooms[roomId].host = this.rooms[roomId].players[0].id;
+        if (rooms[roomId].players.length > 0) {
+          rooms[roomId].players[0].isHost = true;
+          rooms[roomId].host = rooms[roomId].players[0].id;
         } else {
-          this.rooms[roomId].host = null;
-          this.rooms[roomId].status = "waiting";
+          rooms[roomId].host = null;
+          rooms[roomId].status = "waiting";
         }
       }
-      this.notifyListeners();
+      this.saveRoomsData(rooms);
     }
   }
 
@@ -205,19 +226,13 @@ class OnlineRoomManager {
   }
 
   startGame(roomId) {
-    if (this.rooms[roomId]) {
-      this.rooms[roomId].status = "started";
-      this.notifyListeners();
+    const rooms = this.getRoomsData();
+    if (rooms[roomId]) {
+      rooms[roomId].status = "started";
+      this.saveRoomsData(rooms);
       return true;
     }
     return false;
-  }
-
-  updateGameState(roomId, gameState) {
-    if (this.rooms[roomId]) {
-      this.rooms[roomId].gameState = gameState;
-      this.notifyListeners();
-    }
   }
 
   subscribe(callback) {
@@ -229,6 +244,13 @@ class OnlineRoomManager {
 
   notifyListeners() {
     this.listeners.forEach(cb => cb());
+  }
+
+  startPolling() {
+    // Verificar cambios cada 500ms
+    setInterval(() => {
+      this.notifyListeners();
+    }, 500);
   }
 }
 
