@@ -142,9 +142,15 @@ class OnlineRoomManager {
     this.listeners = [];
   }
 
-  createRoom(roomId) {
+  createRoom(roomId, hostId, hostName) {
     if (!this.rooms[roomId]) {
-      this.rooms[roomId] = { id: roomId, players: [], gameState: null, host: null };
+      this.rooms[roomId] = { 
+        id: roomId, 
+        players: [{id: hostId, name: hostName, isHost: true}], 
+        gameState: null, 
+        host: hostId,
+        status: "waiting" // waiting, started
+      };
       this.notifyListeners();
       return true;
     }
@@ -152,16 +158,23 @@ class OnlineRoomManager {
   }
 
   joinRoom(roomId, playerId, playerName) {
-    if (this.rooms[roomId] && this.rooms[roomId].players.length < 6) {
-      this.rooms[roomId].players.push({ id: playerId, name: playerName });
-      this.notifyListeners();
-      return true;
+    if (this.rooms[roomId] && this.rooms[roomId].players.length < 6 && this.rooms[roomId].status === "waiting") {
+      const exists = this.rooms[roomId].players.some(p => p.id === playerId);
+      if (!exists) {
+        this.rooms[roomId].players.push({ id: playerId, name: playerName, isHost: false });
+        this.notifyListeners();
+        return true;
+      }
     }
     return false;
   }
 
   getRooms() {
-    return Object.values(this.rooms).filter(r => r.players.length > 0);
+    return Object.values(this.rooms).filter(r => r.status === "waiting");
+  }
+
+  getRoomDetails(roomId) {
+    return this.rooms[roomId];
   }
 
   leaveRoom(roomId, playerId) {
@@ -172,6 +185,34 @@ class OnlineRoomManager {
       }
       this.notifyListeners();
     }
+  }
+
+  removePlayer(roomId, playerId) {
+    if (this.rooms[roomId]) {
+      this.rooms[roomId].players = this.rooms[roomId].players.filter(p => p.id !== playerId);
+      if (this.rooms[roomId].players.length === 0) {
+        delete this.rooms[roomId];
+      }
+      this.notifyListeners();
+    }
+  }
+
+  startGame(roomId) {
+    if (this.rooms[roomId]) {
+      this.rooms[roomId].status = "started";
+      this.notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  deleteRoom(roomId) {
+    if (this.rooms[roomId]) {
+      delete this.rooms[roomId];
+      this.notifyListeners();
+      return true;
+    }
+    return false;
   }
 
   updateGameState(roomId, gameState) {
@@ -197,9 +238,7 @@ const roomManager = new OnlineRoomManager();
 
 // ─── UTILS ──────────────────────────────────────────────────────────
 function rollDie() { return Math.floor(Math.random() * 6) + 1; }
-
 function rollDice(n) { return Array.from({length: n}, rollDie).sort((a,b)=>b-a); }
-
 function resolveAttack(atkDice, defDice) {
   let aLoss=0, dLoss=0;
   const pairs = Math.min(atkDice.length, defDice.length);
@@ -208,17 +247,14 @@ function resolveAttack(atkDice, defDice) {
   }
   return {aLoss, dLoss};
 }
-
 function hashStr(s) {
   let h=0; for(let i=0;i<s.length;i++) h=Math.imul(31,h)+s.charCodeAt(i)|0;
   return Math.abs(h);
 }
-
 function pointsPath(pts) {
   if(!pts.length) return "";
   return `M ${pts.map(([x,y])=>`${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ")} Z`;
 }
-
 function makeTerritoryPolygon(tid) {
   const pos = TERRITORY_POSITIONS[tid];
   if(!pos) return [];
@@ -233,7 +269,6 @@ function makeTerritoryPolygon(tid) {
     return [pos.x+Math.cos(angle)*rx+Math.sin(angle*1.3)*2.4, pos.y+Math.sin(angle)*ry+Math.cos(angle*1.1)*1.8];
   });
 }
-
 function calcReinforcements(territories, playerId) {
   const owned = territories.filter(t=>t.owner===playerId);
   let bonus = Math.max(3, Math.floor(owned.length/3));
@@ -243,7 +278,6 @@ function calcReinforcements(territories, playerId) {
   }
   return bonus;
 }
-
 function groupByContinent() {
   const g = {};
   for(const [tid,cont] of Object.entries(TERRITORY_CONTINENT)) {
@@ -252,13 +286,11 @@ function groupByContinent() {
   }
   return g;
 }
-
 function shuffle(arr) {
   const a=[...arr];
   for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
   return a;
 }
-
 function initGame(players) {
   const tids = Object.keys(TERRITORY_POSITIONS);
   const shuffled = shuffle(tids);
@@ -461,8 +493,9 @@ function OnlineHomeScreen({onBack, onCreateRoom, onJoinRoom}) {
   const handleCreateRoom = () => {
     if (!playerName.trim()) { alert("Ingresa tu nombre"); return; }
     if (!roomId.trim()) { alert("Ingresa un ID de sala"); return; }
-    if (roomManager.createRoom(roomId)) {
-      onCreateRoom(playerName, roomId);
+    const hostId = "p_" + Date.now();
+    if (roomManager.createRoom(roomId, hostId, playerName)) {
+      onCreateRoom(hostId, playerName, roomId);
     } else {
       alert("Sala ya existe");
     }
@@ -470,8 +503,9 @@ function OnlineHomeScreen({onBack, onCreateRoom, onJoinRoom}) {
 
   const handleJoinRoom = (room) => {
     if (!playerName.trim()) { alert("Ingresa tu nombre"); return; }
-    if (roomManager.joinRoom(room.id, "p"+Date.now(), playerName)) {
-      onJoinRoom(playerName, room.id);
+    const playerId = "p_" + Date.now();
+    if (roomManager.joinRoom(room.id, playerId, playerName)) {
+      onJoinRoom(playerId, playerName, room.id);
     } else {
       alert("No puedes unirte a esta sala");
     }
@@ -516,6 +550,91 @@ function OnlineHomeScreen({onBack, onCreateRoom, onJoinRoom}) {
   );
 }
 
+// ─── ROOM LOBBY SCREEN ─────────────────────────────────────────────────
+function RoomLobbyScreen({roomId, playerId, playerName, isHost, onBack, onStartGame}) {
+  const [roomDetails, setRoomDetails] = useState(null);
+
+  useEffect(() => {
+    const unsub = roomManager.subscribe(() => {
+      const details = roomManager.getRoomDetails(roomId);
+      setRoomDetails(details);
+    });
+    const details = roomManager.getRoomDetails(roomId);
+    setRoomDetails(details);
+    return unsub;
+  }, [roomId]);
+
+  if (!roomDetails) return <div style={{color:"#fff"}}>Cargando...</div>;
+
+  const handleRemovePlayer = (pId) => {
+    roomManager.removePlayer(roomId, pId);
+  };
+
+  const handleStartGame = () => {
+    if (roomDetails.players.length < 2) {
+      alert("Necesitas al menos 2 jugadores para comenzar");
+      return;
+    }
+    roomManager.startGame(roomId);
+    onStartGame();
+  };
+
+  const handleDeleteRoom = () => {
+    if (confirm("¿Estás seguro que quieres eliminar la sala?")) {
+      roomManager.deleteRoom(roomId);
+      onBack();
+    }
+  };
+
+  return (
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",background:"linear-gradient(135deg,#050d1a 0%,#0d2137 100%)"}}>
+      <div style={{background:"rgba(0,0,0,0.8)",border:"2px solid rgba(255,215,0,0.4)",borderRadius:"16px",padding:"32px",maxWidth:"600px",width:"100%"}}>
+        <button onClick={onBack} style={{background:"none",border:"none",color:"#556677",cursor:"pointer",fontSize:"13px",padding:0,marginBottom:"16px"}}>← Volver</button>
+        
+        <div style={{textAlign:"center",marginBottom:"24px"}}>
+          <h2 style={{color:"#FFD700",fontSize:"26px",fontFamily:"Georgia,serif",marginBottom:"8px"}}>Sala {roomId}</h2>
+          <p style={{color:"#88aacc",fontSize:"14px"}}>Esperando jugadores...</p>
+          {isHost && <p style={{color:"#2ecc71",fontSize:"12px",marginTop:"4px"}}>👑 Eres el HOST</p>}
+        </div>
+
+        <div style={{background:"rgba(255,215,0,0.08)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:"8px",padding:"16px",marginBottom:"16px"}}>
+          <p style={{color:"#FFD700",fontSize:"14px",fontWeight:"bold",marginBottom:"12px"}}>Jugadores ({roomDetails.players.length}/6):</p>
+          {roomDetails.players.map((player, i) => (
+            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(0,0,0,0.3)",borderRadius:"6px",padding:"10px",marginBottom:"8px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                <span style={{color:PLAYER_COLORS[i],fontSize:"16px"}}>●</span>
+                <div>
+                  <p style={{color:"#fff",fontSize:"14px"}}>{player.name}</p>
+                  <p style={{color:"#888",fontSize:"11px"}}>{player.isHost ? "👑 HOST" : "Jugador"}</p>
+                </div>
+              </div>
+              {isHost && !player.isHost && (
+                <button onClick={() => handleRemovePlayer(player.id)} 
+                  style={{...btn("#cc2200","#ff3300"),width:"auto",padding:"4px 12px",fontSize:"11px"}}>
+                  Expulsar
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {isHost && (
+          <div style={{display:"flex",gap:"12px"}}>
+            <button onClick={handleStartGame} 
+              style={{...btn("#226600","#33aa00"),flex:1}}>
+              ▶️ Iniciar Juego
+            </button>
+            <button onClick={handleDeleteRoom} 
+              style={{...btn("#cc2200","#ff3300"),flex:1}}>
+              🗑️ Eliminar Sala
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SetupScreen({onStart, onBack}) {
   const [players, setPlayers] = useState([
     {name:"Jugador 1",color:PLAYER_COLORS[0]},
@@ -544,7 +663,7 @@ function SetupScreen({onStart, onBack}) {
       <div style={{background:"rgba(0,0,0,0.8)",border:"2px solid rgba(255,215,0,0.4)",borderRadius:"16px",padding:"32px",maxWidth:"480px",width:"100%"}}>
         <button onClick={onBack} style={{background:"none",border:"none",color:"#556677",cursor:"pointer",fontSize:"13px",padding:0,marginBottom:"16px"}}>← Volver</button>
         <h2 style={{color:"#FFD700",fontSize:"26px",fontFamily:"Georgia,serif",textAlign:"center",marginBottom:"24px"}}>Configurar Partida</h2>
-        <p style={{color:"#aabbcc",fontSize:"12px",marginBottom:"14px"}}>Jugadores ({players.length}/6) — Modo Hotseat (se turnan en el mismo dispositivo)</p>
+        <p style={{color:"#aabbcc",fontSize:"12px",marginBottom:"14px"}}>Jugadores ({players.length}/6)</p>
         {players.map((p,i)=>(
           <div key={i} style={{display:"flex",gap:"8px",alignItems:"center",marginBottom:"8px"}}>
             <div style={{width:"18px",height:"18px",borderRadius:"50%",background:p.color,flexShrink:0,boxShadow:`0 0 6px ${p.color}`}}/>
@@ -797,7 +916,7 @@ function GameScreen({initialPlayers, onBack, isOnline = false, roomId = null}) {
 
       <div style={{background:"rgba(0,0,0,0.92)",borderBottom:"2px solid #FFD70055",padding:"7px 14px",display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap",flexShrink:0}}>
         <span style={{color:"#FFD700",fontFamily:"Georgia,serif",fontSize:"20px",fontWeight:"bold"}}>RISK</span>
-        {isOnline && <span style={{color:"#88aaff",fontSize:"12px"}}>🌐 Online - {roomId}</span>}
+        {isOnline && <span style={{color:"#88aaff",fontSize:"12px"}}>🌐 Online - Sala {roomId}</span>}
         <div style={{display:"flex",gap:"5px",alignItems:"center",flexWrap:"wrap",flex:1}}>
           {gs.players.map(p=>{
             const tCount=Object.values(gs.territories).filter(t=>t.owner===p.id).length;
@@ -924,7 +1043,7 @@ function GameScreen({initialPlayers, onBack, isOnline = false, roomId = null}) {
 function App() {
   const [screen, setScreen] = useState("home");
   const [players, setPlayers] = useState(null);
-  const [onlineRoom, setOnlineRoom] = useState(null);
+  const [onlineSession, setOnlineSession] = useState(null);
 
   if(screen==="home") return <HomeScreen 
     onStart={()=>setScreen("setup")}
@@ -933,12 +1052,36 @@ function App() {
   
   if(screen==="online-home") return <OnlineHomeScreen 
     onBack={()=>setScreen("home")}
-    onCreateRoom={(name, roomId)=>{
-      setOnlineRoom({name, roomId});
-      setScreen("online-game");
+    onCreateRoom={(hostId, hostName, roomId)=>{
+      setOnlineSession({hostId, hostName, roomId, isHost: true});
+      setScreen("room-lobby");
     }}
-    onJoinRoom={(name, roomId)=>{
-      setOnlineRoom({name, roomId});
+    onJoinRoom={(playerId, playerName, roomId)=>{
+      setOnlineSession({playerId, playerName, roomId, isHost: false});
+      setScreen("room-lobby");
+    }}
+  />;
+
+  if(screen==="room-lobby" && onlineSession) return <RoomLobbyScreen
+    roomId={onlineSession.roomId}
+    playerId={onlineSession.hostId || onlineSession.playerId}
+    playerName={onlineSession.hostName || onlineSession.playerName}
+    isHost={onlineSession.isHost}
+    onBack={()=>{
+      if(onlineSession.isHost || onlineSession.playerId) {
+        roomManager.leaveRoom(onlineSession.roomId, onlineSession.hostId || onlineSession.playerId);
+      }
+      setOnlineSession(null);
+      setScreen("online-home");
+    }}
+    onStartGame={()=>{
+      const roomDetails = roomManager.getRoomDetails(onlineSession.roomId);
+      const gamePlayers = roomDetails.players.map((p, i) => ({
+        id: "p" + i,
+        name: p.name,
+        color: PLAYER_COLORS[i]
+      }));
+      setPlayers(gamePlayers);
       setScreen("online-game");
     }}
   />;
@@ -953,17 +1096,16 @@ function App() {
     onBack={()=>{setPlayers(null);setScreen("home");}}
   />;
   
-  if(screen==="online-game"&&onlineRoom) return <GameScreen 
-    initialPlayers={[
-      {id:"p0",name:onlineRoom.name,color:PLAYER_COLORS[0]}
-    ]}
+  if(screen==="online-game"&&players && onlineSession) return <GameScreen 
+    initialPlayers={players}
     onBack={()=>{
-      roomManager.leaveRoom(onlineRoom.roomId, "p0");
-      setOnlineRoom(null);
+      roomManager.leaveRoom(onlineSession.roomId, onlineSession.hostId || onlineSession.playerId);
+      setOnlineSession(null);
+      setPlayers(null);
       setScreen("home");
     }}
     isOnline={true}
-    roomId={onlineRoom.roomId}
+    roomId={onlineSession.roomId}
   />;
   
   return null;
